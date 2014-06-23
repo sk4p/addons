@@ -1,0 +1,6 @@
+<Addon Name="FastTargetFrame" Version="2" Author="nohh" APIVersion="8" Description="Target frames without the FPS loss">
+    <Script Name="FastTargetFrame.lua"/>
+    <Form Name="FastTargetFrame.xml"/>
+    <Form Name="TargetRewardPanel.xml"/>
+    <ReplaceAddon Name="TargetFrame"/>
+</Addon>

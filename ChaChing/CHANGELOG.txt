@@ -1,0 +1,7 @@
+CHANGELOG
+
+V1.01:
+* Fixed an error when you sell things
+
+v1.0:
+* Initial release

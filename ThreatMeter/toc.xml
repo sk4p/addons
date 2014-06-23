@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Addon Author="daihenka" APIVersion="8" Name="ThreatMeter" Description="A Threat Meter" Version="0.8.1">
+    <Script Name="libs/DaiAddon-1.0/DaiAddon.lua"/>
+    <Script Name="libs/DaiGUI-1.0/DaiGUI.lua"/>
+    <Script Name="libs/DaiUtil-1.0/DaiUtil.lua"/>
+    <Script Name="init.lua"/>
+    <Script Name="core.lua"/>
+    <Script Name="ui.lua"/>
+    <Script Name="colorpicker.lua" />
+    <Script Name="options.lua"/>
+</Addon>

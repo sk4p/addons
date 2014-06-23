@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Addon Author="sk4p" APIVersion="8" Name="StatCheatSheet" Version="0.2" Description="A simple display of the stat priorities for a class of your choice.">
+    <Script Name="StatCheatSheet.lua"/>
+    <Form Name="StatCheatSheet.xml"/>
+</Addon>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Addon Author="Adelea" APIVersion="8" Name="Cha-Ching!" Description="Highlights items on CX 'Sell-Now' page where there are buy-orders for more than the vendor price" Version="1.01">
+    <Script Name="lib/GeminiHook-1.0.lua"/>
+    <Script Name="lib/GeminiAddon.lua"/>
+    <Script Name="Chaching.lua"/>
+</Addon>
