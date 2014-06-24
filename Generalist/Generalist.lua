@@ -40,7 +40,11 @@ local genSlotFromId = -- string name, then id, then button art
 	[10] = "ImplantSlot",
 	[11] = "GadgetSlot",
 	[15] = "ShieldSlot",	
-	[16] = "WeaponSlot",				
+	[16] = "WeaponSlot",
+	[17] = "BagSlot0",
+	[18] = "BagSlot1",
+	[19] = "BagSlot2",
+	[20] = "BagSlot3",			
 }
 
 local altClassToIcon =
@@ -720,12 +724,31 @@ function Generalist:GetCharEquipment()
 	local myName = unitPlayer:GetName()
 	if self.altData[myName] == nil then self.altData[myName] = {} end
 
+	-- Start the bag index correctly
+	local bagIndex = GameLib.CodeEnumEquippedItems.Bag0
+	
 	local eq = unitPlayer:GetEquippedItems()
 	local equipment = {}
 	self.altData[myName].fullItem = {}
 	for key, itemEquipped in pairs(eq) do
-		equipment[itemEquipped:GetSlot()] = itemEquipped:GetItemId()
-		self.altData[myName].fullItem[itemEquipped:GetSlot()] = itemEquipped
+		
+		-- What slot does this item go in?
+		local theSlot = itemEquipped:GetSlot()
+		
+		-- Is this a bag?
+		if theSlot == GameLib.CodeEnumEquippedItems.Bag0 then
+		
+			-- Use the next bag index instead of the slot the item "goes in"
+			theSlot = bagIndex
+			
+			-- And increment the bag index
+			bagIndex = bagIndex + 1
+			
+		end
+	
+		equipment[theSlot] = itemEquipped:GetItemId()
+		self.altData[myName].fullItem[theSlot] = itemEquipped
+		
 	end 
 	self.altData[myName].equipment = equipment
 end
@@ -811,6 +834,15 @@ end
 -----------------------------------------------------------------------------------------------
 function Generalist:PopulateDetailWindow(charName)
 
+	-- If one previously existed, nuke it.
+	if self.wndDetail ~= nil then
+		self.wndDetail:Show(false,true)
+		self.wndDetail:Close()
+		self.wndDetail:DestroyChildren()
+		self.wndDetail:Destroy()
+		self.wndDetail = nil
+	end
+
 	-- Set up the details window
 	if self.wndDetail == nil then
 		self.wndDetail = Apollo.LoadForm(self.xmlDoc, "DetailForm", self.wndMain, self)
@@ -873,7 +905,7 @@ function Generalist:PopulateDetailWindow(charName)
 		self.wndAmps:FindChild("TradeskillPickerList"), self)
 	wndAmpEntry:SetData('amps')
 	wndAmpEntry:SetText('AMPs Unlocked')
-	
+		
 	-- Next, sneak currencies in
 	local wndCurrency = Apollo.LoadForm(self.xmlDoc, "TradeskillBtn", 
 		self.wndAmps:FindChild("TradeskillPickerList"), self)
@@ -881,10 +913,10 @@ function Generalist:PopulateDetailWindow(charName)
 	wndCurrency:SetText('Currencies')
 	
 	-- Next, sneak dyes in
-	local wndCurrency = Apollo.LoadForm(self.xmlDoc, "TradeskillBtn", 
+	local wndDyes = Apollo.LoadForm(self.xmlDoc, "TradeskillBtn", 
 		self.wndAmps:FindChild("TradeskillPickerList"), self)
-	wndCurrency:SetData('dyes')
-	wndCurrency:SetText('Dyes')	
+	wndDyes:SetData('dyes')
+	wndDyes:SetText('Dyes')	
 	
 	-- Finally, do the tradeskills
 	if entry.tradeSkills ~= nil and table.getn(entry.tradeSkills) > 0 then
