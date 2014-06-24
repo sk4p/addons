@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <Addon Author="sk4p" APIVersion="8" Name="Generalist"
-Description="A handy tool for managing alternate characters." Version="0.6.3">
+Description="A handy tool for managing alternate characters." Version="0.6.4">
 
 	<Script Name="Generalist.lua"/>
 

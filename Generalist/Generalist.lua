@@ -440,10 +440,10 @@ function Generalist:UpdateCurrentCharacter()
 	self:GetUnlockedAmps()
 	
 	-- Update the character's list of known tradeskills and schematics
-	self:GetTradeskills(myName)
+	self:GetTradeskills()
 	
 	-- Update the character's equipped gear
-	self:GetCharEquipment(myName)
+	self:GetCharEquipment()
 	
 	-- Update the character's inventory
 	self:GetCharInventory()
@@ -463,6 +463,7 @@ function Generalist:GetCharLevel()
 	local unitPlayer = GameLib.GetPlayerUnit()
 	if unitPlayer == nil then return end
 	local myName = unitPlayer:GetName()
+	if self.altData[myName] == nil then self.altData[myName] = {} end
 	self.altData[myName].level = unitPlayer:GetLevel()
 		
 end
@@ -472,7 +473,8 @@ function Generalist:GetCharCash()
 	local unitPlayer = GameLib.GetPlayerUnit()
 	if unitPlayer == nil then return end
 	local myName = unitPlayer:GetName()
-	self.altData[myName].cash    = GameLib.GetPlayerCurrency():GetAmount()
+	if self.altData[myName] == nil then self.altData[myName] = {} end
+	self.altData[myName].cash = GameLib.GetPlayerCurrency():GetAmount()
 		
 end
 
@@ -481,6 +483,7 @@ function Generalist:GetCharInventory()
 	local unitPlayer = GameLib.GetPlayerUnit()
 	if unitPlayer == nil then return end
 	local myName = unitPlayer:GetName()
+	if self.altData[myName] == nil then self.altData[myName] = {} end
 	
 	-- Hash for storing our complete inventory
 	local myInv = {}
@@ -577,6 +580,7 @@ function Generalist:GetCharCurrency()
 	local unitPlayer = GameLib.GetPlayerUnit()
 	if unitPlayer == nil then return end
 	local myName = unitPlayer:GetName()
+	if self.altData[myName] == nil then self.altData[myName] = {} end
 	
 	-- The table to store currency.
 	local currency = {}
@@ -605,6 +609,7 @@ function Generalist:GetUnlockedAmps()
 	local unitPlayer = GameLib.GetPlayerUnit()
 	if unitPlayer == nil then return end
 	local myName = unitPlayer:GetName()
+	if self.altData[myName] == nil then self.altData[myName] = {} end
 	
 	-- Get AMPs
 	local amps = AbilityBook.GetEldanAugmentationData(AbilityBook.GetCurrentSpec()).tAugments
@@ -624,7 +629,13 @@ function Generalist:GetUnlockedAmps()
 	self.altData[myName].unlocked = unlocked
 end
 
-function Generalist:GetTradeskills(myName)
+function Generalist:GetTradeskills()
+
+	-- If possible, get my name.
+	local unitPlayer = GameLib.GetPlayerUnit()
+	if unitPlayer == nil then return end
+	local myName = unitPlayer:GetName()
+	if self.altData[myName] == nil then self.altData[myName] = {} end
 	
 	-- Schematics table
 	if self.altData[myName].schematics == nil then
@@ -698,8 +709,15 @@ function Generalist:GetTradeskills(myName)
 	
 end
 
-function Generalist:GetCharEquipment(myName)
-	local eq = GameLib.GetPlayerUnit():GetEquippedItems()
+function Generalist:GetCharEquipment()
+
+	-- If possible, get my name.
+	local unitPlayer = GameLib.GetPlayerUnit()
+	if unitPlayer == nil then return end
+	local myName = unitPlayer:GetName()
+	if self.altData[myName] == nil then self.altData[myName] = {} end
+
+	local eq = unitPlayer:GetEquippedItems()
 	local equipment = {}
 	self.altData[myName].fullItem = {}
 	for key, itemEquipped in pairs(eq) do
