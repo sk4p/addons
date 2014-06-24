@@ -451,6 +451,9 @@ function Generalist:UpdateCurrentCharacter()
 	-- Currency
 	self:GetCharCurrency()
 	
+	-- Dyes
+	self:GetCharDyes()
+	
 	
 end
 
@@ -727,6 +730,28 @@ function Generalist:GetCharEquipment()
 	self.altData[myName].equipment = equipment
 end
 
+function Generalist:GetCharDyes()
+	
+	-- If possible, get my name.
+	local unitPlayer = GameLib.GetPlayerUnit()
+	if unitPlayer == nil then return end
+	local myName = unitPlayer:GetName()
+	if self.altData[myName] == nil then self.altData[myName] = {} end
+	
+	-- Get list of dyes
+	local dyes = GameLib.GetKnownDyes()
+	
+	-- Return if I couldn't get them or there are none
+	if dyes == nil then return end
+	
+	-- Sort the dyes
+	table.sort(dyes, function (a,b) return a.strName < b.strName end)	
+	
+	-- And save
+	self.altData[myName].dyes = dyes
+	
+end
+
 -----------------------------------------------------------------------------------------------
 -- Generate a Chat Link
 -----------------------------------------------------------------------------------------------
@@ -837,6 +862,11 @@ function Generalist:PopulateDetailWindow(charName)
 	-- Tradeskill Picker
 	self.wndAmps:FindChild("TradeskillPickerList"):DestroyChildren()
 	self.wndAmps:FindChild("AmpTradeButton"):AttachWindow(self.wndDetail:FindChild("TradeskillPickerListFrame"))
+	self.wndAmps:FindChild("AmpTradeButton"):SetText('Details and Tradeskills')
+	
+	-- Empty the recipe list item
+	local recList = self.wndAmps:FindChild("RecipeList")
+	recList:DestroyChildren()
 	
 	-- First, sneak AMPs into this list
 	local wndAmpEntry = Apollo.LoadForm(self.xmlDoc, "TradeskillBtn", 
@@ -848,7 +878,13 @@ function Generalist:PopulateDetailWindow(charName)
 	local wndCurrency = Apollo.LoadForm(self.xmlDoc, "TradeskillBtn", 
 		self.wndAmps:FindChild("TradeskillPickerList"), self)
 	wndCurrency:SetData('currency')
-	wndCurrency:SetText('Currencies')	
+	wndCurrency:SetText('Currencies')
+	
+	-- Next, sneak dyes in
+	local wndCurrency = Apollo.LoadForm(self.xmlDoc, "TradeskillBtn", 
+		self.wndAmps:FindChild("TradeskillPickerList"), self)
+	wndCurrency:SetData('dyes')
+	wndCurrency:SetText('Dyes')	
 	
 	-- Finally, do the tradeskills
 	if entry.tradeSkills ~= nil and table.getn(entry.tradeSkills) > 0 then
@@ -1009,6 +1045,11 @@ function Generalist:EnsureBackwardsCompatibility(myName)
 		self.altData[myName].currency = {}
 	end
 	
+	-- Dyes
+	if self.altData[myName].dyes == nil then
+		self.altData[myName].dyes = {}
+	end
+	
 	-- Zone
 	if self.altData[myName].zone == nil then
 		self.altData[myName].zone = '(Unknown location)'
@@ -1085,6 +1126,34 @@ function Generalist:OnAmpTradePicked( wndHandler, wndControl, eMouseButton )
 			wnd:SetText("(No AMPs unlocked)")
 		end
 		
+	elseif pickedSkill == 'dyes' then -- dyes
+	
+		if table.getn(entry.dyes) > 0 then
+		
+			for _,dye in ipairs(entry.dyes) do
+			
+				-- Add an item with the name of the dye
+				local wnd = Apollo.LoadForm(self.xmlDoc, "SchematicKnown", recList, self)
+				wnd:FindChild("ItemName"):SetText(dye.strName)
+	
+				-- Get the sprite
+				local strName
+				if dye.strName and dye.strName:len() > 0 then
+					strName = dye.strName
+				else
+					strName = String_GetWeaselString(Apollo.GetString("CRB_CurlyBrackets"), "", dye.nRampIndex)
+				end
+
+				local strSprite = "CRB_DyeRampSprites:sprDyeRamp_" .. dye.nRampIndex
+				wnd:FindChild("ItemIcon"):SetSprite(strSprite)
+			
+			end
+		
+		else -- no dyes known
+			local wnd = Apollo.LoadForm(self.xmlDoc, "NoSchematicKnown", recList, self)
+			wnd:SetText("(No dyes known)")
+		end
+		
 	elseif pickedSkill == 'currency' then -- currencies
 	
 		-- Loop through currencies
@@ -1107,16 +1176,12 @@ function Generalist:OnAmpTradePicked( wndHandler, wndControl, eMouseButton )
 			
 				-- And set the correct value
 				wnd:FindChild("AltCurrencyAmount"):SetAmount(entry.currency[cType], true)
-			
-				-- wnd:FindChild("PickerEntryBtn"):SetData(idx)
-				-- wnd:FindChild("PickerEntryBtn"):SetCheck(idx == 1)
-				-- wnd:FindChild("PickerEntryBtn"):SetTooltip(tData.strDescription)
-				
+		
 			end -- if we have this type of currency
 		
 		end
 	
-	else -- schematics rather than amps
+	else -- schematics
 	
 		-- get the schematics for the desired tradeskill
 		local schematics
