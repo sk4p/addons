@@ -76,6 +76,15 @@ local altPathToString = {
 	[PlayerPathLib.PlayerPathType_Scientist] = Apollo.GetString("PlayerPathScientist"),
 }
 
+-- Lifted from Carbine's Inventory addon
+local karCurrency =  	-- Alt currency table; re-indexing the enums so they don't have to be in sequence code-side (and removing cash)
+{						-- To add a new currency just add an entry to the table; the UI will do the rest. Idx == 1 will be the default one shown
+	{eType = Money.CodeEnumCurrencyType.Renown, 			strTitle = Apollo.GetString("CRB_Renown"), 				strDescription = Apollo.GetString("CRB_Renown_Desc")},
+	{eType = Money.CodeEnumCurrencyType.ElderGems, 			strTitle = Apollo.GetString("CRB_Elder_Gems"), 			strDescription = Apollo.GetString("CRB_Elder_Gems_Desc")},
+	{eType = Money.CodeEnumCurrencyType.Prestige, 			strTitle = Apollo.GetString("CRB_Prestige"), 			strDescription = Apollo.GetString("CRB_Prestige_Desc")},
+	{eType = Money.CodeEnumCurrencyType.CraftingVouchers, 	strTitle = Apollo.GetString("CRB_Crafting_Vouchers"), 	strDescription = Apollo.GetString("CRB_Crafting_Voucher_Desc")}
+}
+
 local origItemToolTipForm = nil
 
 -----------------------------------------------------------------------------------------------
@@ -199,7 +208,8 @@ function Generalist:OnDocLoaded()
 end
 
 ---------------------------------------------------------------------------------------------------
--- Timer
+-- Timer function.  Used to keep trying to get the player unit on load
+-- until GameLib has caught up and we have it.
 ---------------------------------------------------------------------------------------------------
 
 function Generalist:OnTimer()
@@ -207,26 +217,26 @@ function Generalist:OnTimer()
 	-- Get the current character's name
 	local unitPlayer = GameLib.GetPlayerUnit()
 
+	-- Return if nil, because GameLib isn't ready.
 	if unitPlayer == nil then
 		return
 	end
 	
 	-- If we didn't return, that means we got the player, and it's time to
 	-- update their info and switch the timer off.
+	--
 	self.timer = nil
 	self:UpdateCurrentCharacter()
 	
 end
 
 ---------------------------------------------------------------------------------------------------
--- Timer
+-- Timer when we change worlds
 ---------------------------------------------------------------------------------------------------
 
 function Generalist:OnChangeWorld()
-
-		-- Restart a timer until we can load player info
-		self.timer = ApolloTimer.Create(2, true, "OnTimer", self)
-	
+	-- Restart the timer until we can load player info
+	self.timer = ApolloTimer.Create(2, true, "OnTimer", self)	
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -244,43 +254,31 @@ end
 
 -- on SlashCommand "/gen"
 function Generalist:OnGeneralistOn()
-	self.wndMain:Invoke() -- show the window
-		
+
+	-- show the window
+	self.wndMain:Invoke()
+
 	-- populate the character list
 	self:PopulateCharList()
+		
 end
 
 -----------------------------------------------------------------------------------------------
--- Close window button functions.  
+-- Close window button functions.  These don't get simpler.
 -----------------------------------------------------------------------------------------------
 
 function Generalist:OnCancel()
-	-- Close the detail window as well if it's there
-	if self.wndDetail ~= nil then
-		self.wndDetail:Close()
-		self.detailOpen = false
-	end
-	-- Close the search window as well if it's there
-	if self.wndSearch ~= nil then
-		self.wndSearch:Close()
-		self.searchOpen = nil
-	end
-	-- And close the main window
-	self.wndMain:Close()
+	self.wndMain:Show(false,true)
 end
 
-function Generalist:OnDetailCancel()
+function Generalist:OnDetailClose()
 	-- Close the detail window
-	self.wndDetail:Close()
-	-- And mark that it's closed, so we can open another
-	self.detailOpen = false
+	self.wndDetail:Show(false,true)
 end
 
 function Generalist:OnSearchClose()
 	-- Close the search window
-	self.wndSearch:Close()
-	-- And mark that it's closed, so we can open another
-	self.searchOpen = nil
+	self.wndSearch:Show(false,true)
 end
 
 -----------------------------------------------------------------------------------------------
@@ -315,7 +313,7 @@ function Generalist:PopulateCharList()
 	local cc
 	local name
 	for counter, name in ipairs(a) do
-		self:AddEntry(name,counter)
+		self:AddCharToList(name,counter)
 		
 		-- Add this character's money to the total
 		if self.altData[name].cash ~= nil then
@@ -357,7 +355,7 @@ end
 -- 
 -- Add alt's entry into the item list at a particular index
 --
-function Generalist:AddEntry(name,i)
+function Generalist:AddCharToList(name,i)
 	-- load the window item for the list item
 	local wnd = Apollo.LoadForm(self.xmlDoc, "CharListEntry", self.charList, self)
 	
@@ -449,6 +447,10 @@ function Generalist:UpdateCurrentCharacter()
 	
 	-- Update the character's inventory
 	self:GetCharInventory()
+	
+	-- Currency
+	self:GetCharCurrency()
+	
 	
 end
 
@@ -567,6 +569,34 @@ function Generalist:GetCharInventory()
 	-- Finally, set our data
 	self.altData[myName].inventory = myInv
 	
+end
+
+function Generalist:GetCharCurrency()
+
+	-- If possible, get my name.
+	local unitPlayer = GameLib.GetPlayerUnit()
+	if unitPlayer == nil then return end
+	local myName = unitPlayer:GetName()
+	
+	-- The table to store currency.
+	local currency = {}
+
+	-- Loop through currencies
+	for idx = 1, #karCurrency do
+		
+		local tData = karCurrency[idx]
+		local cType = tData.eType
+		
+		local theAmount = GameLib.GetPlayerCurrency(tData.eType):GetAmount()
+		
+		if theAmount ~= nil then
+			currency[cType] = theAmount
+		end
+
+	end -- of loop through currencies
+	
+	self.altData[myName].currency = currency
+
 end
 
 function Generalist:GetUnlockedAmps()
@@ -702,18 +732,14 @@ end
 -----------------------------------------------------------------------------------------------
 -- Activating the Detail window
 -----------------------------------------------------------------------------------------------
-function Generalist:OnListItemSelected(wndHandler, wndControl)
+function Generalist:OnCharacterSelected(wndHandler, wndControl)
     -- make sure the wndControl is valid
     if wndHandler ~= wndControl then
         return
     end
-    
-	-- Is one already open?
-	if self.detailOpen then
-		return
-	end
-	
-	if self.searchOpen then
+  
+	-- But is the search window open?
+	if self.wndSearch ~= nil and self.wndSearch:IsShown() then
 		return
 	end
 	
@@ -743,7 +769,10 @@ end
 function Generalist:PopulateDetailWindow(charName)
 
 	-- Set up the details window
-	self.wndDetail = Apollo.LoadForm(self.xmlDoc, "DetailForm", self.wndMain, self)
+	if self.wndDetail == nil then
+		self.wndDetail = Apollo.LoadForm(self.xmlDoc, "DetailForm", self.wndMain, self)
+	end
+	
 	if self.wndDetail == nil then
 		Apollo.AddAddonErrorText(self, "Could not load the details window for some reason.")
 		return
@@ -792,11 +821,18 @@ function Generalist:PopulateDetailWindow(charName)
 	self.wndAmps:FindChild("AmpTradeButton"):AttachWindow(self.wndDetail:FindChild("TradeskillPickerListFrame"))
 	
 	-- First, sneak AMPs into this list
-	local wndCurr = Apollo.LoadForm(self.xmlDoc, "TradeskillBtn", 
+	local wndAmpEntry = Apollo.LoadForm(self.xmlDoc, "TradeskillBtn", 
 		self.wndAmps:FindChild("TradeskillPickerList"), self)
-	wndCurr:SetData('amps')
-	wndCurr:SetText('AMPs Unlocked')
+	wndAmpEntry:SetData('amps')
+	wndAmpEntry:SetText('AMPs Unlocked')
 	
+	-- Next, sneak currencies in
+	local wndCurrency = Apollo.LoadForm(self.xmlDoc, "TradeskillBtn", 
+		self.wndAmps:FindChild("TradeskillPickerList"), self)
+	wndCurrency:SetData('currency')
+	wndCurrency:SetText('Currencies')	
+	
+	-- Finally, do the tradeskills
 	if entry.tradeSkills ~= nil and table.getn(entry.tradeSkills) > 0 then
 		for i,skill in ipairs (entry.tradeSkills) do
 			local wndCurr = Apollo.LoadForm(self.xmlDoc, "TradeskillBtn", 
@@ -855,22 +891,24 @@ end
 
 function Generalist:OpenSearch( wndHandler, wndControl, eMouseButton )
 	
-	-- Return if there's already a search open
-	if self.searchOpen ~= nil then
+	-- Is a detail window already open?  If so, no search.
+	if self.wndDetail ~= nil and self.wndDetail:IsShown() then
 		return
 	end
+		
+	-- Set up the search window if it doesn't exist
+	if self.wndSearch == nil then
+		self.wndSearch = Apollo.LoadForm(self.xmlDoc, "SearchForm", self.wndMain, self)
+	end
 	
-	-- Set up the search window
-	self.wndSearch = Apollo.LoadForm(self.xmlDoc, "SearchForm", self.wndMain, self)
+	-- But if it STILL doesn't exist, we need to complain.
 	if self.wndSearch == nil then
 		Apollo.AddAddonErrorText(self, "Could not load the search window for some reason.")
 		return
 	end
-	self.wndSearch:Show(false, true)
-	self.wndSearch:SetOpacity(1,1)
 	
-	-- Prevent opening another one
-	self.searchOpen = true
+	-- Hidden for the moment
+	self.wndSearch:Show(false, true)
 	
 	-- And now display the window
 	self.wndSearch:Invoke()
@@ -946,6 +984,11 @@ function Generalist:EnsureBackwardsCompatibility(myName)
 	-- Unlocked
 	if self.altData[myName].inventory == nil then
 		self.altData[myName].inventory = {}
+	end
+	
+	-- Currency
+	if self.altData[myName].currency == nil then
+		self.altData[myName].currency = {}
 	end
 	
 	-- Zone
@@ -1024,6 +1067,37 @@ function Generalist:OnAmpTradePicked( wndHandler, wndControl, eMouseButton )
 			wnd:SetText("(No AMPs unlocked)")
 		end
 		
+	elseif pickedSkill == 'currency' then -- currencies
+	
+		-- Loop through currencies
+		for idx = 1, #karCurrency do
+		
+			local tData = karCurrency[idx]
+			local cType = tData.eType
+			
+			-- Do we have a currency of this type?
+			if entry.currency ~= nil and entry.currency[cType] ~= nil then
+			
+				-- Make a new item in the list
+				local wnd = Apollo.LoadForm(self.xmlDoc, "AltCurrency", recList, self)
+			
+				-- Set this item to that type of currency
+				wnd:FindChild("AltCurrencyAmount"):SetMoneySystem(tData.eType)
+			
+				-- Set its title accordingly
+				wnd:FindChild("AltCurrencyName"):SetText(tData.strTitle)
+			
+				-- And set the correct value
+				wnd:FindChild("AltCurrencyAmount"):SetAmount(entry.currency[cType], true)
+			
+				-- wnd:FindChild("PickerEntryBtn"):SetData(idx)
+				-- wnd:FindChild("PickerEntryBtn"):SetCheck(idx == 1)
+				-- wnd:FindChild("PickerEntryBtn"):SetTooltip(tData.strDescription)
+				
+			end -- if we have this type of currency
+		
+		end
+	
 	else -- schematics rather than amps
 	
 		-- get the schematics for the desired tradeskill
@@ -1446,7 +1520,7 @@ function Generalist:OnForgetConfirmYes( wndHandler, wndControl, eMouseButton )
 	self.wndDetail:FindChild("ForgetConfirm"):Show(false)
 	
 	-- Close the details window
-	self.wndDetail:Close()
+	self.wndDetail:Show(false,true)
 	self.detailOpen = false
 	
 	-- Forget the alt
