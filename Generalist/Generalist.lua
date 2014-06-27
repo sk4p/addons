@@ -747,7 +747,7 @@ function Generalist:GetCharEquipment()
 		end
 	
 		equipment[theSlot] = itemEquipped:GetItemId()
-		self.altData[myName].fullItem[theSlot] = itemEquipped
+		self.altData[myName].fullItem[theSlot] = itemEquipped:GetDetailedInfo()
 		
 	end 
 	self.altData[myName].equipment = equipment
