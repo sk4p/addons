@@ -1010,7 +1010,10 @@ function Generalist:OnSave(eLevel)
         return nil
     end
 
-	-- Simply return the table we've been using!
+	-- Forget any temp data we were using for testing
+	self.altData.tmp = nil
+
+	-- Then return the table we've been using!
 	return self.altData
 end
 
