@@ -3,18 +3,18 @@ local function spairs(t)
 	-- Collect keys
 	local keys = {}
 	local sort = true
-	
+
 	for k in pairs(t) do
 		keys[#keys + 1] = k
 		if type(k) ~= "string" then
 			sort = false
 		end
 	end
-	
+
 	if sort then
 		table.sort(keys)
 	end
-	
+
 	-- Return the iterator function
 	local i = 0
 	return function()
@@ -29,9 +29,9 @@ end
 -- Client Lua Script for Rover
 -- Copyright (c) NCsoft. All rights reserved
 -----------------------------------------------------------------------------------------------
- 
+
 require "Window"
- 
+
 -----------------------------------------------------------------------------------------------
 -- Rover Module Definitions
 -----------------------------------------------------------------------------------------------
@@ -42,8 +42,15 @@ Rover.ADD_ONCE = 1
 Rover.ADD_DEFAULT = 2
 
 local tModifierTimer
-local tHackTimer
- 
+local tBottomTimer
+local tXMLRefs = {}
+local tEvents = {}
+local tBlacklistedEvents = {
+	["NextFrame"] = true,
+	["VarChange_FrameCount"] = true,
+	["ActionBarDescriptionSpell"] = true,
+}
+
 -----------------------------------------------------------------------------------------------
 -- Constants
 -----------------------------------------------------------------------------------------------
@@ -66,54 +73,95 @@ local kStrDetailed = "detailed__data"
 -----------------------------------------------------------------------------------------------
 
 Rover.userdataDisplay = {
-	[Unit] = function(u) return ("<UNIT %s (#%d)>"):format(u:GetName(), u:GetId()) end,
+	[ApolloColor] = function(u) return ("<APOLLOCOLOR %s>"):format(tostring(u)) end,
+	[ApolloTimer] = function(u) return ("<APOLLOTIMER %s>"):format(tostring(u)) end,
+	[CColor] = function(u) return ("<CCOLOR %s>"):format(tostring(u)) end,
 	[Episode] = function(u) return ("<EPISODE #%d \"%s\">"):format(u:GetId(),u:GetTitle()) end,
-	[PathEpisode] = function(u) return ("<PATHEPISODE \"%s\" (%s)>"):format(u:GetName(),u:GetWorldZone()) end,
-	[Quest] = function(u) return ("<QUEST #%d \"%s\">"):format(u:GetId(),u:GetTitle()) end,
-	[PathMission] = function(u) return ("<PATHMISSION #%d \"%s\" (%d/%d)>"):format(u:GetId(),u:GetName(),u:GetNumCompleted(),u:GetNumNeeded()) end,
 	[Item] = function(u) return ("<ITEM #%d \"%s\">"):format(u:GetItemId(), u:GetName()) end,
+	[PathEpisode] = function(u) return ("<PATHEPISODE \"%s\" (%s)>"):format(u:GetName(),u:GetWorldZone()) end,
+	[PathMission] = function(u) return ("<PATHMISSION #%d \"%s\" (%d/%d)>"):format(u:GetId(),u:GetName(),u:GetNumCompleted(),u:GetNumNeeded()) end,
+	[Quest] = function(u) return ("<QUEST #%d \"%s\">"):format(u:GetId(),u:GetTitle()) end,
+	[Unit] = function(u) return ("<UNIT %s (#%d)>"):format(u:GetName(), (u:GetId() or -1)) end,
 	[Vector3] = function(u)
 			local s = tostring(u)
 			local x,y,z = s:match("Vector3%((.*), (.*), (.*)%)")
 			if z then return ("Vector3 (%.2f, %.2f, %.2f)"):format(tonumber(x),tonumber(y),tonumber(z)) end
 		end,
+	[Window] = function(u) return ("<WINDOW \"%s\">"):format(u:GetName()) end,
 }
 
 -----------------------------------------------------------------------------------------------
 -- Initialization
 -----------------------------------------------------------------------------------------------
 function Rover:new(o)
-    o = o or {}
-    setmetatable(o, self)
-    self.__index = self 
-	
+  o = o or {}
+  setmetatable(o, self)
+  self.__index = self
+
 	self.bIsInitialized = false
 	self.bModifierAddAsTop = false
-	
+
 	self.tPreInitData = {}
 	self.tManagedVars = {}
 	self.RoverIDNum = 1
 	self.sSuperSecretNilReplacement = "yyeuriofhdsagjkgadsfbjgcratejasfdghljkdsglasgisjadskhfglasfdghreuigalivejsdhflds"
 
-    -- initialize variables here
+  -- initialize variables here
 
-    return o
+  return o
 end
 
 function Rover:Init()
     Apollo.RegisterAddon(self)
 end
- 
 
 -----------------------------------------------------------------------------------------------
--- Rover OnLoad
+-- Rover OnLoad/Save/Restore
 -----------------------------------------------------------------------------------------------
 function Rover:OnLoad()
+	--Time to get crazy... lets load our own toc
+	local tTOCXml = XmlDoc.CreateFromFile("toc.xml"):ToTable()
+	self.tXML = {}
+	local nIndex = 1
+	for k,v in pairs(tTOCXml) do
+		if v.__XmlNode == "DocData" then
+			local pDir = Apollo.GetAssetFolder() .. "\\" .. v.Name
+			table.insert(tXMLRefs, Apollo.GetAssetFolder() .. "\\" .. v.Name)
+			self.tXML[nIndex] = XmlDoc.CreateFromFile(Apollo.GetAssetFolder() .. "\\" .. v.Name):ToTable()
+			nIndex = nIndex + 1
+		end
+	end
+
     -- load our form file
 	self.xmlDoc = XmlDoc.CreateFromFile("Rover.xml")
-	Apollo.LoadSprites("RoverSprites.xml")
+	Apollo.LoadSprites("RoverSprites.xml", "RoverSprites")
 	-- Register the callback for when the xml is finished loading
 	self.xmlDoc:RegisterCallback("OnDocumentLoaded", self)
+end
+
+function Rover:OnSave(eLevel)
+	if eLevel ~= GameLib.CodeEnumAddonSaveLevel.Character then
+		return
+	end
+
+	local tSave = {
+		tBookmarks = {},
+	}
+	for k,v in pairs(self.tBookmarks) do
+		table.insert(tSave.tBookmarks, k)
+	end
+
+	return tSave
+end
+
+function Rover:OnRestore(eLevel, tSavedData)
+	if eLevel ~= GameLib.CodeEnumAddonSaveLevel.Character then
+		return
+	end
+
+	for k,v in ipairs(tSavedData.tBookmarks) do
+		self:AddBookmark(v)
+	end
 end
 
 -----------------------------------------------------------------------------------------------
@@ -129,8 +177,8 @@ function Rover:OnDocumentLoaded()
 	self.wndMain:Show(false, true)
 
 	-- if the xmlDoc is no longer needed, you should set it to nil
-	self.xmlDoc = nil
-		
+	-- self.xmlDoc = nil
+
 	-- save some windows for later
 	self.wndTree = self.wndMain:FindChild("Variables")
 	self.wndRemoveBtn = self.wndMain:FindChild("s_Column1"):FindChild("RemoveVar")
@@ -139,6 +187,7 @@ function Rover:OnDocumentLoaded()
 	self.wndChnTree = self.wndMain:FindChild("ChannelsList")
 	self.wndParametersDialog = self.wndMain:FindChild("ParametersDialog")
 	self.wndWatchDialog = self.wndMain:FindChild("WatchDialog")
+	self.wndMarkTree = self.wndMain:FindChild("BookmarksList")
 
 	-- more initialization here
 	-- Register handlers for events, slash commands and timer, etc.
@@ -155,6 +204,7 @@ function Rover:OnDocumentLoaded()
 	self.tMonitoredEvents = {}
 	self.tTranscripted = {}
 	self.tChannels = {}
+	self.tBookmarks = {}
 
 	-- Event Handlers
 	Apollo.RegisterEventHandler("SendVarToRover", "AddWatch", self)
@@ -162,9 +212,6 @@ function Rover:OnDocumentLoaded()
 	Apollo.RegisterEventHandler("WindowManagementReady", "OnWindowManagementReady", self)
 	Apollo.RegisterEventHandler("InterfaceMenuListHasLoaded", "OnInterfaceMenuListHasLoaded", self)
 	Apollo.RegisterEventHandler("ToggleRoverWindow", "OnRoverOn", self)
-
-	-- Horrible Hack
-	tHackTimer = ApolloTimer.Create(0.1, true, "OnTreeRefreshHack", self)
 
 	self.bIsInitialized = true
 	for sVarName, varData in pairs(self.tPreInitData) do
@@ -174,29 +221,30 @@ function Rover:OnDocumentLoaded()
 			self:AddWatch(sVarName, varData)
 		end
 		self.tPreInitData[sVarName] = nil
-	end		
+	end
 end
 
 function Rover:OnWindowManagementReady()
 	Event_FireGenericEvent("WindowManagementAdd", {wnd = self.wndMain, strName = "Rover"})
+	local bFound
+	for k,v in pairs(self.tBookmarks) do
+		local bSuccess, vWatch = pcall(loadstring("return " .. k))
+		if bSuccess then
+			bFound = true
+			self:AddWatch(k,vWatch)
+		end
+	end
+	if bFound then
+		self:OnRoverOn()
+	end
 end
 
 function Rover:OnInterfaceMenuListHasLoaded()
 	Event_FireGenericEvent("InterfaceMenuList_NewAddOn","Rover", {"ToggleRoverWindow", "", "RoverSprites:RoverIcon"})
 end
 
-function Rover:OnTreeRefreshHack()
-	local tTrees = { self.wndTree, self.wndEvtTree, self.wndTranscriptTree, self.wndChnTree }
-	for i, tree in ipairs(tTrees) do
-		local nPosDestination = tree:GetVScrollPos()
-		if i == 1 then -- The main Tree can autoscroll down, the rest don't
-			local atBottom = not self.wndMain:FindChild("AutoScrollButton"):IsChecked()  -- Lock icon has reverse logic apparently
-			if atBottom then
-				nPosDestination = tree:GetVScrollRange()
-			end
-		end
-		tree:SetVScrollPos(nPosDestination)
-	end
+function Rover:JumpToBottom()
+	self.wndTree:SetVScrollPos(self.wndTree:GetVScrollRange())
 end
 
 -----------------------------------------------------------------------------------------------
@@ -210,6 +258,7 @@ function Rover:OnRoverOn(strCommand, strParam)
 	if strParam and strParam ~= "" then
 		local bSuccess, vWatch = pcall(loadstring("return " .. strParam))
 		if not bSuccess then
+			self:AddWatch(strParam, self:ParseErrorString(vWatch))
 			return
 		end
 		self:AddWatch(strParam, vWatch)
@@ -254,17 +303,17 @@ function Rover:OnSizeChanged( wndHandler, wndControl )
 		return
 	end
 	local nBorderSize = 7
-	-- DOUBLE DOG DERP!! TreeControl doesn't have a header row (YET) so we have to 
+	-- DOUBLE DOG DERP!! TreeControl doesn't have a header row (YET) so we have to
 	-- explicitly adjust column widths as the parent's size changes
 	for nLabelNumber = 1,4 do
 		local strLabel = string.format("s_Column%d", nLabelNumber)
 		local wndLabel = self.wndMain:FindChild(strLabel)
 		local nWidth = wndLabel:GetWidth()
 		if nLabelNumber == 1 or nLabelNumber == 4 then
-			-- Adjust column width to account for TreeControl's left and right borders 
+			-- Adjust column width to account for TreeControl's left and right borders
 			nWidth = nWidth - nBorderSize
 		end
-		
+
 		self.wndTree:SetColumnWidth(nLabelNumber, nWidth)
 	end
 end
@@ -282,11 +331,11 @@ end
 -----------------------------------------------------------------------------------------------
 -- Rover Variable Tracking Functions
 -----------------------------------------------------------------------------------------------
-function Rover:AnalyzeUserData(userdata)
+function Rover:AnalyzeUserData(userdata, hNode)
 	for base, fnDisplay in pairs(Rover.userdataDisplay) do
-		if base.is and base.is(userdata) then return fnDisplay(userdata) end
-		if base.Is and base.Is(userdata) then return fnDisplay(userdata) end
-		if base.isInstance and base.isInstance(userdata) then return fnDisplay(userdata) end
+		if base.is and base.is(userdata) then return fnDisplay(userdata, hNode) end
+		if base.Is and base.Is(userdata) then return fnDisplay(userdata, hNode) end
+		if base.isInstance and base.isInstance(userdata) then return fnDisplay(userdata, hNode) end
 	end
 	return tostring(userdata)
 end
@@ -314,28 +363,41 @@ function Rover:AddVariable(strName, var, hParent)
 	if hParent == 0 then
 		self.tManagedVars[strName] = hNewNode
 	end
-	
+
 	local strType = type(var)
 	self.wndTree:SetNodeText(hNewNode, eRoverColumns.Type, strType, var)
-	
+
 	if strType == "nil" then
 		return
 	end
-	
+
 	if strType == "table" or strType == "userdata" then
 		local hPlace = self.wndTree:AddNode(hNewNode, "PLACEHOLDER", "")
 		self.wndTree:CollapseNode(hNewNode)
 	end
-	
-	local str = strType == "userdata" and self:AnalyzeUserData(var) or tostring(var)
+
+	local str = strType == "userdata" and self:AnalyzeUserData(var, hNewNode) or tostring(var)
 
 	local nodeIcon = self:SelectIcon(var, strType, hParent)
 	if nodeIcon then
 		self.wndTree:SetNodeImage(hNewNode, nodeIcon)
 	end
-	
+
+	-- Per SinusPi strings over 100 cause a crash.. double click to view instead!
+	if #str > 100 then
+		str = str:sub(1,100) .. " ..."
+	end
+
 	self.wndTree:SetNodeText(hNewNode, eRoverColumns.Value, str)
 	self:UpdateTimeStamp(hNewNode)
+
+	if not self.wndMain:FindChild("AutoScrollButton"):IsChecked() then -- Lock icon has reverse logic apparently
+		if tBottomTimer then
+			tBottomTimer:Start()
+		else
+			tBottomTimer = ApolloTimer.Create(0.1, false, "JumpToBottom", self)
+		end
+	end
 end
 
 function Rover:OnExpandNode( wndHandler, wndControl, hNode )
@@ -369,10 +431,13 @@ function Rover:OnTwoClicks( wndHandler, wndControl, hNode )
 	if type(var) == "number" and self.wndTree:GetNodeData(hParent) == _G.Sound then
 		Sound.Play(var)
 		return
+	elseif type(var) == "string" then
+		self:GenerateTextBox(self.wndTree:GetNodeText(hNode, eRoverColumns.VarName), var)
+		return
 	elseif type(var) ~= "function" then
 		return
 	end
-	
+
 	if Apollo.IsShiftKeyDown() then
 		self.wndParametersDialog:SetData(hNode)
 		self.wndParametersDialog:Show(true)
@@ -382,10 +447,14 @@ function Rover:OnTwoClicks( wndHandler, wndControl, hNode )
 	end
 
 	self.wndTree:DeleteChildren(hNode)
-	
+
+	local hGrandParent = self.wndTree:GetParentNode(hParent)
+
 	self:AddCallResult(hNode, pcall(function()
 		if self.wndTree:GetNodeText(hParent) == 'metatable' then
 			return var(self.wndTree:GetNodeData(self.wndTree:GetParentNode(hParent)))
+		elseif hGrandParent and self.wndTree:GetNodeText(hGrandParent) == 'metatable' then
+			return var(self.wndTree:GetNodeData(self.wndTree:GetParentNode(hGrandParent)))
 		else
 			return var()
 		end
@@ -404,7 +473,7 @@ function Rover:OnParameterInputEnter( wndHandler, wndControl, strText )
 	local hNode = self.wndParametersDialog:GetData()
 	local var = self.wndTree:GetNodeData(hNode)
 	self.wndTree:DeleteChildren(hNode)
-	
+
 	local hParent = self.wndTree:GetParentNode(hNode)
 	local bIncludeSelf = self.wndParametersDialog:FindChild("IncludeSelfBtn"):IsChecked()
 
@@ -429,17 +498,17 @@ function Rover:AddCallResult(hNode, bExecutedCorrectly, ...)
 		self:AddVariable("execution error", self:ParseErrorString(arg[1]), hNode)
 		return
 	end
-	
+
 	if arg.n == 0 then
 		self:AddVariable("no return value", nil, hNode)
 		return
 	end
-	
+
 	if arg.n == 1 then
 		self:AddVariable("result", arg[1], hNode)
 		return
 	end
-	
+
 	for i, result in pairs(arg) do
 		if i ~= 'n' then
 			self:AddVariable("result " .. i, result, hNode)
@@ -449,11 +518,11 @@ end
 
 function Rover:ParseErrorString(sError)
 	local startIndex = sError:find("bad argument")
-	
+
 	if startIndex == nil then
 		return sError
 	end
-	
+
 	return sError:sub(startIndex)
 end
 
@@ -464,7 +533,7 @@ function Rover:AddWatch(strName, var, iOptions)
 		elseif iOptions == self.ADD_ALL and self.tPreInitData[strName] ~= nil then
 			strName = strName .. "  (+" .. self:GetRoverID() .. ")"
 		end
-		
+
 		if var == nil then
 			var = self.sSuperSecretNilReplacement
 		end
@@ -475,7 +544,7 @@ function Rover:AddWatch(strName, var, iOptions)
 		elseif iOptions == self.ADD_ALL and self.tManagedVars[strName] ~= nil then
 			strName = strName .. "  (+" .. self:GetRoverID() .. ")"
 		end
-	
+
 		self:AddVariable(strName, var, 0)
 	end
 end
@@ -530,6 +599,16 @@ function Rover:OnRemoveAllVars( wndHandler, wndControl, eMouseButton )
 	end
 end
 
+function Rover:GenerateTextBox(strName, strText)
+	local wndTextBox = Apollo.LoadForm(self.xmlDoc, "TextBox", nil, self)
+	wndTextBox:FindChild("Title"):SetText(strName)
+	wndTextBox:FindChild("Text"):SetText(strText)
+end
+
+function Rover:OnTextBoxClose( wndHandler, wndControl, eMouseButton )
+	wndControl:GetParent():GetParent():Destroy()
+end
+
 -----------------------------------------------------------------------------------------------
 -- Rover Add buttons
 -----------------------------------------------------------------------------------------------
@@ -540,7 +619,7 @@ end
 
 function Rover:OnAddMyselfVar()
 	local uUnit = GameLib.GetPlayerUnit()
-	
+
 	if uUnit ~= nil then
 		self:AddVariable("myself (" .. uUnit:GetName() .. ")", uUnit, 0)
 	end
@@ -567,7 +646,7 @@ end
 
 function Rover:OnAddTargetVar()
 	local uUnit = GameLib.GetTargetUnit()
-	
+
 	if uUnit ~= nil then
 		self:AddVariable("target (" .. uUnit:GetName() .. ")", uUnit, 0)
 	end
@@ -575,13 +654,13 @@ end
 
 function Rover:EnableModifierAdd()
 	self.bModifierAddAsTop = false
-	
+
 	local btnMdTop = self.wndMain:FindChild("ButtonAddByModifierTop")
 	if btnMdTop:IsChecked() then
 		btnMdTop:SetCheck(false)
 		return
 	end
-	
+
 	self:EnableModifierTimer()
 end
 
@@ -593,7 +672,7 @@ function Rover:EnableModifierAddTop()
 		btnMd:SetCheck(false)
 		return
 	end
-		
+
 	self:EnableModifierTimer()
 end
 
@@ -613,13 +692,13 @@ function Rover:OnModifierAddCheck()
 	if not Apollo.IsControlKeyDown() then
 		return
 	end
-	
+
 	local wndFound = Apollo.GetMouseTargetWindow()
-	
+
 	if wndFound == nil then
 		return
 	end
-	
+
 	if self.bModifierAddAsTop then
 		local wndParent = wndFound
 		while wndParent ~= nil do
@@ -627,9 +706,9 @@ function Rover:OnModifierAddCheck()
 			wndParent = wndFound:GetParent()
 		end
 	end
-	
+
 	self:AddWatch("Window: " .. wndFound:GetName(), wndFound, self.ADD_ALL)
-	
+
 	self.wndMain:FindChild("ButtonAddByModifier"):SetCheck(false)
 	self.wndMain:FindChild("ButtonAddByModifierTop"):SetCheck(false)
 	self:DisableModifierTimer()
@@ -639,16 +718,44 @@ end
 -- Rover Event Monitoring
 -----------------------------------------------------------------------------------------------
 
-function Rover:BuildMonitorFunc(eventName)
+local function ParseEventXML(tXML)
+	for _,v in ipairs(tXML) do
+		if v.__XmlNode == "Event" then
+			tEvents[v.Name] = v.Desc or ""
+		end
+		if v[1] then
+			ParseEventXML(v)
+		end
+	end
+end
+
+function Rover:OnAddAllEvents()
+	if tXMLRefs then
+		for _,file in ipairs(tXMLRefs) do
+			local tXML = XmlDoc.CreateFromFile(file):ToTable()
+			ParseEventXML(tXML)
+		end
+		tXMLRefs = nil
+	end
+	for k,v in spairs(tEvents) do
+		if not tBlacklistedEvents[k] then
+			self:OnAddEventMonitor(k, v)
+		end
+	end
+end
+
+function Rover:BuildMonitorFunc(eventName, strDesc)
 	-- Use a closure instead, much cleaner than previous method
 	local eName = "Event: " .. eventName
+	local strDescription = strDesc and strDesc ~= "" and strDesc or nil
 	return  function(self,...)
+				arg.strDesc = strDescription
 				self:AddWatch(eName, arg, 0)
 			end
 end
 
 -- Adds Event Monitoring for specified event
-function Rover:OnAddEventMonitor(eventName)
+function Rover:OnAddEventMonitor(eventName, strDesc)
 	-- If we are already monitoring this then just stop now!
 	if self.tMonitoredEvents[eventName] ~= nil then
 		return
@@ -658,16 +765,16 @@ function Rover:OnAddEventMonitor(eventName)
 	if eventName == "SendVarToRover" or eventName == "RemoveVarFromRover" then
 		return
 	end
-		
+
 	-- Add new entry to tree for viewing
 	local hNewNode = self.wndEvtTree:AddNode(0, eventName, "", eventName)
 	-- Store reference to node
 	self.tMonitoredEvents[eventName] = hNewNode
-	
+
 	-- Build handler name, use the prefix + eventName
 	local handlerName = handlerPrefix..eventName
 	-- Create handler and assign it to rover
-	Rover[handlerName] = self:BuildMonitorFunc(eventName)
+	Rover[handlerName] = self:BuildMonitorFunc(eventName, strDesc)
 	-- Register handler with Apollo
 	Apollo.RegisterEventHandler(eventName, handlerName, self)
 end
@@ -678,7 +785,7 @@ function Rover:OnRemoveEventMonitor(eventName)
 	if self.tMonitoredEvents[eventName] ~= nil then
 		-- Remove display node for event
 		self.wndEvtTree:DeleteNode(self.tMonitoredEvents[eventName])
-		
+
 		-- Build handler name, use the prefix + eventName
 		local handlerName = handlerPrefix..eventName
 		-- Clear out monitored event reference
@@ -1000,8 +1107,7 @@ function Rover:OnTranscriptTreeSelection( wndHandler, wndControl, hSelected, hPr
 
 	-- Toggle detailed information setting
 	self.tTranscripted[strAddonName][kStrDetailed] = not self.tTranscripted[strAddonName][kStrDetailed]
-	
-	-- TODO: Switch back to Icons once the crash bug is fixed =)
+
 	if self.tTranscripted[strAddonName][kStrDetailed] then
 		wndControl:SetNodeImage(hSelected, "CRB_Basekit:kitIcon_Holo_HazardObserver")
 	else
@@ -1016,8 +1122,8 @@ end
 function Rover:BuildChannelListener(strChannelName)
 	-- Closure for channel monitoring
 	local cName = "Channel: " .. strChannelName
-	return  function(self, ...)
-				self:AddWatch(cName, arg, 0)
+	return  function(self, channel, tMsg, strSender)
+				self:AddWatch(cName, { channel = channel, tMsg = tMsg, strSender = strSender }, 0)
 			end
 end
 
@@ -1026,12 +1132,12 @@ function Rover:ListenChannel(strChannelName)
 	if self.tChannels[strChannelName] ~= nil then
 		return
 	end
-		
+
 	-- Add new entry to tree for viewing
 	local hNewNode = self.wndChnTree:AddNode(0, strChannelName, "", strChannelName)
 	-- Store reference to node
 	self.tChannels[strChannelName] = { hNode = hNewNode }
-	
+
 	-- Build handler name, use the prefix + eventName
 	local handlerName = channelPrefix..strChannelName
 	-- Create handler and assign it to rover
@@ -1047,7 +1153,7 @@ function Rover:OnRemoveChannelListening(strChannelName)
 	if self.tChannels[strChannelName] ~= nil then
 		-- Remove display node for event
 		self.wndChnTree:DeleteNode(self.tChannels[strChannelName].hNode)
-		
+
 		-- Build handler name, use the prefix + eventName
 		local handlerName = channelPrefix..strChannelName
 		-- Clear out monitored event reference, this removes the channel object, hopefully this stops us listening
@@ -1065,7 +1171,7 @@ function Rover:OnRemoveAllChannels( wndHandler, wndControl, eMouseButton )
 	end
 end
 
--- Add Channel button, toggles input section for entry of event name
+-- Add Channel button, toggles input section for entry of ICCommLib Channel
 function Rover:OnAddChannelToggle( wndHandler, wndControl, eMouseButton )
 	local showWnd = self.wndMain:FindChild("AddChannelBtn"):IsChecked()
 	self.wndMain:FindChild("ChannelInputContainer"):Show(showWnd)
@@ -1074,13 +1180,13 @@ function Rover:OnAddChannelToggle( wndHandler, wndControl, eMouseButton )
 	end
 end
 
--- Close button on event form, toggle the event button then close via toggle func
+-- Close button on Channel form, toggle the channels button then close via toggle func
 function Rover:OnChannelsCloseClick( wndHandler, wndControl, eMouseButton )
 	self.wndMain:FindChild("ChannelBtn"):SetCheck(false)
 	self:OnChannelsMonitorToggle()
 end
 
--- Double clicking Channels deletes them, this doesn't really do anything now though.
+-- Double clicking Channels deletes them
 function Rover:OnChannelDoubleClick( wndHandler, wndControl, hNode )
 	local strChannelName = wndControl:GetNodeData(hNode)
 	self:OnRemoveChannelListening(strChannelName)
@@ -1095,7 +1201,7 @@ function Rover:OnChannelInputReturn( wndHandler, wndControl, strText )
 	self:OnAddChannelToggle()
 end
 
--- Toggle if the Event Form is displayed or not
+-- Toggle if the Channel Form is displayed or not
 function Rover:OnChannelsMonitorToggle( wndHandler, wndControl, eMouseButton )
 	-- Determine if we are going to be showing this window or not
 	local bShowWnd = self.wndMain:FindChild("ChannelBtn"):IsChecked()
@@ -1112,6 +1218,90 @@ function Rover:OnChannelsMonitorToggle( wndHandler, wndControl, eMouseButton )
 	end
 	-- Set proper shown state
 	self.wndMain:FindChild("ChannelsWindow"):Show(bShowWnd)
+end
+
+-----------------------------------------------------------------------------------------------
+-- Rover Bookmarks
+-----------------------------------------------------------------------------------------------
+
+function Rover:AddBookmark(strBookmarkName)
+	if self.tBookmarks[strBookmarkName] ~= nil then
+		return
+	end
+
+	-- Add new entry to tree for viewing
+	local hNode = self.wndMarkTree:AddNode(0, strBookmarkName, "", strBookmarkName)
+	-- Store reference to node
+	self.tBookmarks[strBookmarkName] = hNode
+end
+
+-- Remove all Bookmarks
+function Rover:OnRemoveAllBookmarks( wndHandler, wndControl, eMouseButton )
+	for _, BookmarkNode in pairs(self.tBookmarks) do
+		self.wndMarkTree:DeleteNode(BookmarkNode)
+	end
+end
+
+-- Close button on Bookmark form, toggle the bookmark button then close via toggle func
+function Rover:OnBookmarksCloseClick( wndHandler, wndControl, eMouseButton )
+	self.wndMain:FindChild("BookmarkBtn"):SetCheck(false)
+	self:OnBookmarksToggle()
+end
+
+-- Add bookmark button, toggles input section for entry of bookmark
+function Rover:OnAddBookmarkToggle( wndHandler, wndControl, eMouseButton )
+	local showWnd = self.wndMain:FindChild("AddBookmarkBtn"):IsChecked()
+	self.wndMain:FindChild("BookmarkInputContainer"):Show(showWnd)
+	if showWnd then
+		self.wndMain:FindChild("BookmarkInput"):SetFocus()
+	end
+end
+
+-- Double clicking Bookmarks deletes them
+function Rover:OnBookmarkDoubleClick( wndHandler, wndControl, hNode )
+	self.wndMarkTree:DeleteNode(hNode)
+end
+
+-- Single click a bookmark to make it show up in rover
+function Rover:OnBookmarkSelection( wndHandler, wndControl, hSelected, hPrevSelected )
+	-- Get a reference from the node
+	local strBookmarkName = wndControl:GetNodeData(hSelected)
+	-- We double clicked and deleted the node, apparently that happens before single clicks.
+	if not strBookmarkName then return end
+	local bSuccess, vWatch = pcall(loadstring("return " .. strBookmarkName))
+	if not bSuccess then
+		self:AddWatch(strBookmarkName, self:ParseErrorString(vWatch))
+		return
+	end
+	self:AddWatch(strBookmarkName, vWatch)
+end
+
+-- Handles someone pressing enter after typing the name of the bookmark to add
+--	Also hides entry section once entered.
+function Rover:OnBookmarkInputReturn( wndHandler, wndControl, strText )
+	self:AddBookmark(strText)
+	wndControl:SetText("")
+	self.wndMain:FindChild("AddBookmarkBtn"):SetCheck(false)
+	self:OnAddBookmarkToggle()
+end
+
+-- Toggle if the Bookmark Form is displayed or not
+function Rover:OnBookmarksToggle( wndHandler, wndControl, eMouseButton )
+	-- Determine if we are going to be showing this window or not
+	local bShowWnd = self.wndMain:FindChild("BookmarkBtn"):IsChecked()
+	if bShowWnd then
+		-- If we were previously showing one of the windows hide it
+		if self.wndPrevious then
+			self.wndPrevious:Show(false)
+		end
+		-- Record that this window is now showing
+		self.wndPrevious = self.wndMain:FindChild("BookmarksWindow")
+	else
+		-- We closed the window, so no window is showing now
+		self.wndPrevious = nil
+	end
+	-- Set proper shown state
+	self.wndMain:FindChild("BookmarksWindow"):Show(bShowWnd)
 end
 
 -----------------------------------------------------------------------------------------------

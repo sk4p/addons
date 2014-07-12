@@ -1,0 +1,3 @@
+<Addon Name="CostumesFix" Version="1.2" Author="Pippit" APIVersion="8" Description="Fixes flickering costume slot issue.">
+    <Script Name="CostumesFix.lua"/>
+</Addon>

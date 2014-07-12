@@ -1,0 +1,5 @@
+<Addon Name="BetterChatLog" Version="1" Author="Sojiro" APIVersion="8" Description="Changes the font of dialogs and the chat window itself to a better looking one.">
+    <Script Name="BetterChatLog.lua"/>
+    <Form Name="BetterChatLog.xml"/>
+    <ReplaceAddon Name="ChatLog"/>
+</Addon>

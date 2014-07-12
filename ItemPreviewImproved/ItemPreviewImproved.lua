@@ -5,6 +5,7 @@
  
 require "Window"
 require "GameLib"
+require "HousingLib"
 require "Item"
  
 -----------------------------------------------------------------------------------------------
@@ -16,6 +17,10 @@ local ItemPreviewImproved = {}
 -- Constants
 -----------------------------------------------------------------------------------------------
 -- e.g. local kiExampleVariableMax = 999
+local kcrDoubleMarkerOff 		= ApolloColor.new("UI_BtnTextHoloNormal")
+local kcrDoubleMarkerHighlight 	= ApolloColor.new("UI_BtnTextHoloFlyby")
+local kcrDoubleMarkerSelected 	= ApolloColor.new("UI_BtnTextRedNormal")
+
 local karCostumeSlotNames = -- string name, then id, then button art
 {
 	{"Weapon", 		GameLib.CodeEnumItemSlots.Weapon,	"CharacterWindowSprites:btn_Armor_HandsNormal", 20},
@@ -53,13 +58,31 @@ local ktVisibleSlots =
 	16
 }
 
-local ktTimeRemaining =
+-- Supported AuctionHouse Addons
+local suppAuctionHouse =
 {
-	[ItemAuction.CodeEnumAuctionRemaining.Expiring]		= Apollo.GetString("MarketplaceAuction_Expiring"),
-	[ItemAuction.CodeEnumAuctionRemaining.LessThanHour]	= Apollo.GetString("MarketplaceAuction_LessThanHour"),
-	[ItemAuction.CodeEnumAuctionRemaining.Short]		= Apollo.GetString("MarketplaceAuction_Short"),
-	[ItemAuction.CodeEnumAuctionRemaining.Long]			= Apollo.GetString("MarketplaceAuction_Long"),
-	--[ItemAuction.CodeEnumAuctionRemaining.Very_Long]	= Apollo.GetString("MarketplaceAuction_VeryLong") -- Uses string weasel to stick a number in
+	"MarketplaceAuction",
+	"EZAuction"
+}
+
+
+-- Supported Challenge Reward Addons
+local suppChallenges =
+{
+	"ChallengeRewardPanel"
+}
+
+-- Supported Vendor Addons
+local suppVendors =
+{
+	"Vendor",
+	"LilVendor"
+}
+-- Supported Roll Addons
+local suppRolls =
+{
+	"NeedVsGreed",
+	"LootRollEnhanced"
 }
 
 -- Supported Dialog Addons
@@ -74,17 +97,17 @@ local suppDialogs =
 
 }
 
--- Supported Tradeskills Schematics Addons
-local suppSchematics =
-{
-	"Hephaestus"
-}
-
 -- Supported Tradeskills Techtree Addons
 local suppTechtree =
 {
 	"Tradeskills",
 	"CRBTradeskills"
+}
+
+-- Supported Tradeskills Schematics Addons
+local suppSchematics =
+{
+	"TradeskillSchematics",
 }
 
 -- Supported Questlog Addons
@@ -138,7 +161,7 @@ function ItemPreviewImproved:new(o)
 end
 
 function ItemPreviewImproved:Init()
-    Apollo.RegisterAddon(self)
+    Apollo.RegisterAddon(self, nil, nil, {"Gemini:Hook-1.0", "Lib:ApolloFixes-1.0"})
 end
 
 function ItemPreviewImproved:OnSave(eLevel)
@@ -148,10 +171,28 @@ function ItemPreviewImproved:OnSave(eLevel)
 	end 
 
 	local l,t,r,b = self.wndMain:GetAnchorOffsets()
+	local l2,t2,r2,b2 = self.wndMount:GetAnchorOffsets()
+	local l3,t3,r3,b3 = self.wndFABkit:GetAnchorOffsets() 
 	
-	return {
+	if saveData == true then
+		return {
 		tPosition_Main = { l = l, t = t, r = r, b = b },
+		tPosition_Mount = { l = l2, t = t2, r = r2, b = b2 },
+		tPosition_FABkit = { l = l3, t = t3, r = r3, b = b3 },
+		tData_FABkits = ktFABkits,
+		tData_LightMode = lightMode,
+		tData_NormalAnchor = { nl = nl, nt = nt, nr = nr, nb = nb }
 	}
+	else
+		return {
+		tPosition_Main = { l = l, t = t, r = r, b = b },
+		tPosition_Mount = { l = l2, t = t2, r = r2, b = b2 },
+		tPosition_FABkit = { l = l3, t = t3, r = r3, b = b3 },
+		tData_FABkits = tDataFABkits,
+		tData_LightMode = lightMode,
+		tData_NormalAnchor = { nl = nl, nt = nt, nr = nr, nb = nb }
+	}	
+	end
 	
 end
 
@@ -162,16 +203,38 @@ function ItemPreviewImproved:OnRestore(eLevel,tSavedData)
 	end 
 	
 	local tPosMain = tSavedData.tPosition_Main
-	local tPosTooltip = tSavedData.tPosition_Tooltip
+	local tPosMount = tSavedData.tPosition_Mount
+	local tPosFABkit = tSavedData.tPosition_FABkit
+	local tDataFABkits = tSavedData.tData_FABkits
+	local tDataLightMode = tSavedData.tData_LightMode
+	local tDataNormalAnchor = tSavedData.tData_NormalAnchor
 	
 	if tPosMain ~= nil then 
 		self.wndMain:SetAnchorOffsets(tPosMain.l, tPosMain.t, tPosMain.r, tPosMain.b)
 	end
 	
-	--if tPosTooltip ~= nil then 
-	--	wndChatItemToolTip:SetAnchorOffsets(tPosMain.l, tPosMain.t, tPosMain.r, tPosMain.b)
-	--end 
+	if tPosMount ~= nil then 
+		self.wndMount:SetAnchorOffsets(tPosMount.l, tPosMount.t, tPosMount.r, tPosMount.b)
+	end 
 	
+	if tDataFABkits ~= nil then
+		ktFABkits = tDataFABkits
+	end
+	
+	if tPosFABkit ~= nil then
+		self.wndFABkit:SetAnchorOffsets(tPosFABkit.l, tPosFABkit.t, tPosFABkit.r, tPosFABkit.b)
+	end
+	
+	if tDataLightMode ~= nil then
+		lightMode = tDataLightMode
+	end
+	
+	if tDataNormalAnchor ~= nil then
+		nl = tDataNormalAnchor.nl
+		nr = tDataNormalAnchor.nr
+		nt = tDataNormalAnchor.nt
+		nb = tDataNormalAnchor.nb
+	end
 end 
  
 
@@ -182,13 +245,21 @@ end
 -----------------------------------------------------------------------------------------------
 function ItemPreviewImproved:OnLoad()
     -- load our form file
+	local GeminiHook = Apollo.GetPackage("Gemini:Hook-1.0").tPackage
+	tAddonNames = Apollo.GetAddons()
+	GeminiHook:Embed(self)
 	self.xmlDoc = XmlDoc.CreateFromFile("ItemPreviewImproved.xml")
 	self.xmlDoc:RegisterCallback("OnDocLoaded", self)
 	self.wndMain = Apollo.LoadForm(self.xmlDoc, "ItemPreviewImprovedForm", "TooltipStratum", self)
+	self.wndMount = Apollo.LoadForm(self.xmlDoc, "ItemPreviewImprovedMountForm", "TooltipStratum", self)
+	self.wndFABkit = Apollo.LoadForm(self.xmlDoc, "HousingPreview", nil, self)
 	self.alreadyLoadedCostume = {}
 	playerunit = GameLib.GetPlayerUnit()
 	self.wndMain:FindChild("PreviewWindow"):SetCostume(playerunit)
 	self.wndMain:FindChild("PreviewInformation"):Show(false)
+	self.wndMount:FindChild("noMount"):Show(false)
+	self.wndMount:FindChild("btnInformation"):Show(false)
+	self.wndMount:FindChild("noMountInformation"):Show(false)
 end
 
 -----------------------------------------------------------------------------------------------
@@ -210,24 +281,273 @@ function ItemPreviewImproved:OnDocLoaded()
 		-- e.g. Apollo.RegisterEventHandler("KeyDown", "OnKeyDown", self)
 		Apollo.RegisterEventHandler("ShowItemInDressingRoom", "OnShowItemInDressingRoom", self)
    	    Apollo.RegisterEventHandler("ShowItemInDressingRoom", "DelayTimer", self)
+		Apollo.RegisterEventHandler("AppearanceChanged", "OnAppearanceChanged", self)
+		Apollo.RegisterEventHandler("GenericEvent_InitializeSchematicsTree", "OnSchematicsInitialize", self)
+		Apollo.RegisterEventHandler("SubZoneChanged", "RequestFABKits", self)
+		Apollo.RegisterEventHandler("HousingVendorListRecieved","UpdateFABKits", self)
     	Apollo.RegisterTimerHandler("EventThresholdTimer", "ItemPreviewFormOpenCallback", self)
-		Apollo.RegisterTimerHandler("UpdateCostume", "UpdateCostume", self)
+		Apollo.RegisterTimerHandler("AppearanceChangedTimer", "UpdateCostume", self)
+		Apollo.RegisterTimerHandler("SchematicsHook", "OnSchematicsHook", self)
     	Apollo.CreateTimer("EventThresholdTimer", 0.01, false)
-		Apollo.CreateTimer("UpdateCostume", 0.2, false)
+		Apollo.CreateTimer("AppearanceChangedTimer", 0.1, false)
+		Apollo.CreateTimer("SchematicsHook", 0.1, false)
+		
 
-		-- Do additional Addon initialization here	
+		-- Do additional Addon initialization here
+		
+			
+		--[[
+			DATA INIT
+						]]--
+		saveData = false
+		if lightMode then
+			self.wndMain:FindChild("btnToggleLightMode"):SetCheck(lightMode)
+		else
+			lightMode = false
+		end
+		wndMainResized = false
+				
+		--[[
+			CHALLENGE PREVIEW
+						]]--
+		for key,val in pairs(suppChallenges) do
+			ChallengeAddon = Apollo.GetAddon(val)
+		
+			if ChallengeAddon ~= nil then
+				break
+			end
+		end
+		
+		if ChallengeAddon == nil then
+			ChatSystemLib.PostOnChannel(2,"ItemPreviewImproved: Could not load any supported NeedVsGreed (Roll) addon! \nPlease contact the author of the addon via Curse!")
+		else
+			self:RawHook(ChallengeAddon, "OnIconBlockerClick")
+			self:PostHook(ChallengeAddon, "OnGenerateTooltip")
+		end
+
+				
+		--[[
+			ROLL PREVIEW
+						]]--
+		for key,val in pairs(suppRolls) do
+			RollAddon = Apollo.GetAddon(val)
+		
+			if RollAddon ~= nil then
+				break
+			end
+		end
+		
+		if RollAddon == nil then
+			ChatSystemLib.PostOnChannel(2,"ItemPreviewImproved: Could not load any supported NeedVsGreed (Roll) addon! \nPlease contact the author of the addon via Curse!")
+		else
+			self:PostHook(RollAddon, "DrawLoot")
+			
+			RollAddon.OnMouseButtonUp = function (luaCaller, wndHandler, wndControl, eMouseButton)
+		
+				if Apollo.IsControlKeyDown() and eMouseButton == GameLib.CodeEnumInputMouse.Right then
+					if wndHandler:GetData():GetHousingDecorInfoId() ~= nil and wndHandler:GetData():GetHousingDecorInfoId() ~= 0 then
+								Event_FireGenericEvent("DecorPreviewOpen", wndHandler:GetData():GetHousingDecorInfoId())
+								return
+							else
+								self:OnShowItemInDressingRoom(wndHandler:GetData())
+								return
+							end		
+        		end
+		end
+		end
+		
+		
+		--[[
+			MOUNT / FABKIT PREVIEW
+						]]--
+						
+		for key,val in pairs(suppVendors) do
+			VendorAddon = Apollo.GetAddon(val)
+		
+			if VendorAddon ~= nil then
+				break
+			end
+		end
+		
+		if VendorAddon == nil then
+			ChatSystemLib.PostOnChannel(2,"ItemPreviewImproved: Could not load any supported Vendor addon! \nPlease contact the author of the addon via Curse!")
+		else
+			--self:PostHook(VendorAddon, "OnVendorListItemMouseDown")
+			--self:RawHook(VendorAddon, "OnVendorListItemMouseDown")
+			self:Hook(VendorAddon, "OnVendorListItemMouseDown")
+
+		end
+		
 		--[[
 			AUCTIONHOUSE
 						]]--
 						
-		AuctionHouseAddon = Apollo.GetAddon("MarketplaceAuction")
+		for key,val in pairs(suppAuctionHouse) do
+			AuctionHouseAddon = Apollo.GetAddon(val)
+			
+			if val == "EZAuction" then
+			
+			else
+				ktTimeRemaining =
+				{
+					[ItemAuction.CodeEnumAuctionRemaining.Expiring]		= Apollo.GetString("MarketplaceAuction_Expiring"),
+					[ItemAuction.CodeEnumAuctionRemaining.LessThanHour]	= Apollo.GetString("MarketplaceAuction_LessThanHour"),
+					[ItemAuction.CodeEnumAuctionRemaining.Short]		= Apollo.GetString("MarketplaceAuction_Short"),
+					[ItemAuction.CodeEnumAuctionRemaining.Long]			= Apollo.GetString("MarketplaceAuction_Long"),
+					--[ItemAuction.CodeEnumAuctionRemaining.Very_Long]	= Apollo.GetString("MarketplaceAuction_VeryLong") -- Uses string weasel to stick a number in
+				}
+			end
+		
+			if AuctionHouseAddon ~= nil then
+				break
+			end
+		end
 		
 		if AuctionHouseAddon == nil then
 			ChatSystemLib.PostOnChannel(2,"ItemPreviewImproved: Could not load any supported Auctionhouse addon! \nPlease contact the author of the addon via Curse!")
 		else
-	
-		AuctionHouseAddon.BuildListItem = function (luaCaller, aucCurr, wndParent, bBuyTab)
+			self:RawHook(AuctionHouseAddon, "BuildListItem")
+			
+
+		AuctionHouseAddon.OnMouseButtonUp = function (luaCaller, wndHandler, wndControl, eMouseButton)
+			local aucCurr = wndHandler:GetData()
 			local itemCurr = aucCurr:GetItem()
+			if not itemCurr then
+				return
+			end
+			if Apollo.IsControlKeyDown() and eMouseButton == GameLib.CodeEnumInputMouse.Right then
+				if itemCurr:GetHousingDecorInfoId() ~= nil and itemCurr:GetHousingDecorInfoId() ~= 0 then
+						Event_FireGenericEvent("DecorPreviewOpen", itemCurr:GetHousingDecorInfoId())
+					else
+						self:OnShowItemInDressingRoom(itemCurr)				
+				end
+			end
+		end
+		
+		end
+
+		--[[
+			TRADESKILLS
+						]]--
+		
+		
+		for key,val in pairs(suppTechtree) do
+			TechtreeAddon = Apollo.GetAddon(val)
+		
+			if TechtreeAddon ~= nil then
+				break
+			end
+		end
+		
+		if TechtreeAddon == nil then
+			ChatSystemLib.PostOnChannel(2,"ItemPreviewImproved: Could not load any supported Tradeskills addon! \nPlease contact the author of the addon via Curse!")
+		else
+		
+		self:PostHook(TechtreeAddon, "HelperBuildItemTooltip")
+		
+		TechtreeAddon.OnMouseButtonUp = function (luaCaller, wndHandler, wndControl, eMouseButton)
+		
+				if Apollo.IsControlKeyDown() and eMouseButton == GameLib.CodeEnumInputMouse.Right then
+					if wndHandler:GetData():GetHousingDecorInfoId() ~= nil and wndHandler:GetData():GetHousingDecorInfoId() ~= 0 then
+						Event_FireGenericEvent("DecorPreviewOpen", wndHandler:GetData():GetHousingDecorInfoId())
+						return
+					else
+						self:OnShowItemInDressingRoom(wndHandler:GetData())
+						return
+					end		
+        		end
+		end
+				
+		end
+
+		
+		--[[
+			QUEST REWARD
+						]]--
+		for key,val in pairs(suppDialogs) do
+			DialogAddon = Apollo.GetAddon(val)
+		
+			if DialogAddon ~= nil then
+				break
+			end
+		end
+	
+		if DialogAddon == nil then
+	
+			ChatSystemLib.PostOnChannel(2,"ItemPreviewImproved: Could not load any supported Dialog addon! \nPlease contact the author of the addon via Curse!")
+		else
+			self:PostHook(DialogAddon, "HelperBuildItemTooltip")	
+		
+			DialogAddon.OnMouseButtonUp = function (luaCaller, wndHandler, wndControl, eMouseButton)
+
+				if Apollo.IsControlKeyDown() and eMouseButton == GameLib.CodeEnumInputMouse.Right then
+						self:OnShowItemInDressingRoom(wndHandler:GetData())
+        		end
+		
+			end
+		end
+		
+		--[[
+			QuestLog
+						]]--
+		for key,val in pairs(suppQuestlogs) do
+			QuestLogAddon = Apollo.GetAddon(val)
+			
+			if QuestLogAddon ~= nil then
+				break
+			end
+		end
+		
+		if QuestLogAddon == nil then
+		
+		ChatSystemLib.PostOnChannel(2,"ItemPreviewImproved: Could not load any supported QuestLog addon! \nPlease contact the author of the addon via Curse!")	
+		
+		else
+			
+			self:PostHook(QuestLogAddon, "HelperBuildRewardsRec")
+			
+			QuestLogAddon.OnMouseButtonUp = function (luaCaller, wndHandler, wndControl, eMouseButton)
+				if Apollo.IsControlKeyDown() and eMouseButton == GameLib.CodeEnumInputMouse.Right then
+						self:OnShowItemInDressingRoom(wndHandler:GetData())
+        		end
+		
+			end
+		
+		end
+		--[[
+			CHAT LINKS
+						]]--
+		
+		for key,val in pairs(suppChats) do
+			ChatAddon = Apollo.GetAddon(val["name"])
+			
+			if ChatAddon ~= nil then
+				ChatAddonXML = val["xml"]
+				ChatAddonName = val["name"]
+				break
+			end
+		end
+		
+		if ChatAddon == nil then
+			ChatSystemLib.PostOnChannel(2,"ItemPreviewImproved: Could not load any supported ChatLog addon! \nPlease contact the author of the addon via Curse!")
+		else
+			self:PostHook(ChatAddon, "OnNodeClick")
+		end
+end
+
+
+-----------------------------------------------------------------------------------------------
+-- ItemPreviewImproved Functions
+-----------------------------------------------------------------------------------------------
+-- Define general functions here
+function ItemPreviewImproved:DrawLoot(luaCaller, tCurrentElement, nItemsInQueue)
+	RollAddon.wndMain:FindChild("GiantItemIcon"):AddEventHandler("MouseButtonUp", "OnMouseButtonUp")
+	RollAddon.wndMain:FindChild("GiantItemIcon"):SetData(tCurrentElement.itemDrop)
+	RollAddon.wndMain:FindChild("GiantItemIcon"):SetStyle("IgnoreMouse", false)
+end
+
+function ItemPreviewImproved:BuildListItem(luaCaller, aucCurr, wndParent, bBuyTab)
+	local itemCurr = aucCurr:GetItem()
 			local bIsOwnAuction = aucCurr:IsOwned()
 			local nBuyoutPrice = aucCurr:GetBuyoutPrice():GetAmount()
 			local nDefaultBid = math.max(aucCurr:GetMinBid():GetAmount(), aucCurr:GetCurrentBid():GetAmount())
@@ -276,296 +596,223 @@ function ItemPreviewImproved:OnDocLoaded()
 				wnd:FindChild("BuyNowPrice"):SetAmount(nBuyoutPrice)
 				wnd:FindChild("BuyNowPrice"):SetTextColor(bCanAffordBuyNow and "UI_TextHoloTitle" or "UI_BtnTextRedNormal")
 			end
-		end
+
+end
+
+
+function ItemPreviewImproved:RequestFABKits(num, zone)
+	if num == 1136 then
+		HousingLib.RequestVendorList()
+	end
+end
+
+function ItemPreviewImproved:UpdateFABKits()
+	ktNewFABKits = HousingLib.GetVendorList()
+	ktFABkits = ktNewFABKits
+	saveData = true
+end
+
+function ItemPreviewImproved:OnCloseFABkit( wndHandler, wndControl, eMouseButton )
+	self.wndFABkit:Close()
+end
+
+function ItemPreviewImproved:ScreenshotLeft( wndHandler, wndControl, eMouseButton )
+	local nNewSS = #self.tScreenshots
+	if self.tScreenshots[self.nCurrSS-1] then
+		nNewSS = self.nCurrSS-1
+	end
 	
+	self.nCurrSS = nNewSS
+	self.wndFABkit:FindChild("Picture"):SetSprite(self.tScreenshots[nNewSS].strSprite)
+	self.wndFABkit:ToFront()
+end
 
-		AuctionHouseAddon.OnMouseButtonUp = function (luaCaller, wndHandler, wndControl, eMouseButton)
-			local aucCurr = wndHandler:GetData()
-			local itemCurr = aucCurr:GetItem()
-			if not itemCurr then
-				return
-			end
-			if Apollo.IsControlKeyDown() and eMouseButton == GameLib.CodeEnumInputMouse.Right then
-				if itemCurr:GetHousingDecorInfoId() ~= nil and itemCurr:GetHousingDecorInfoId() ~= 0 then
-						Event_FireGenericEvent("DecorPreviewOpen", itemCurr:GetHousingDecorInfoId())
-					else
-						self:OnShowItemInDressingRoom(itemCurr)				
-				end
-			end
-		end
-		
-		end
+function ItemPreviewImproved:ScreenshotRight( wndHandler, wndControl, eMouseButton )
+	local nNewSS = 1
+	if self.tScreenshots[self.nCurrSS+1] then
+		nNewSS = self.nCurrSS+1
+	end
+	
+	self.nCurrSS = nNewSS
+	self.wndFABkit:FindChild("Picture"):SetSprite(self.tScreenshots[nNewSS].strSprite)
+	self.wndFABkit:ToFront()
+end
 
-		--[[
-			TRADESKILL TECH TREE
-						]]--
-		for key,val in pairs(suppTechtree) do
-			TechtreeAddon = Apollo.GetAddon(val)
+function ItemPreviewImproved:OnSchematicsHook()
+	for key,val in pairs(suppSchematics) do
+		SchematicsAddon = Apollo.GetAddon(val)
 		
-			if TechtreeAddon ~= nil then
-				break
-			end
+		if SchematicsAddon ~= nil then
+			break
 		end
-		
-		if TechtreeAddon == nil then
-			ChatSystemLib.PostOnChannel(2,"ItemPreviewImproved: Could not load any supported Tradeskill addon! \nPlease contact the author of the addon via Curse!")
-		else
-		
-		fTradeskillHelperBuildItemToolTip = TechtreeAddon.HelperBuildItemTooltip
-		TechtreeAddon.HelperBuildItemTooltip = TradeskillHelperBuildItemTooltipHook
-		
-		TechtreeAddon.OnMouseButtonUp = function (luaCaller, wndHandler, wndControl, eMouseButton)
-		
-				if Apollo.IsControlKeyDown() and eMouseButton == GameLib.CodeEnumInputMouse.Right then
-					if wndHandler:GetData():GetHousingDecorInfoId() ~= nil and wndHandler:GetData():GetHousingDecorInfoId() ~= 0 then
+	end
+	
+	if SchematicsAddon ~= nil then
+		if self:IsHooked(SchematicsAddon, "HelperBuildItemTooltip") == false then
+			self:PostHook(SchematicsAddon, "HelperBuildItemTooltip")
+				if SchematicsAddon.OnMouseButtonUp == nil then
+					SchematicsAddon.OnMouseButtonUp = function (luaCaller, wndHandler, wndControl, eMouseButton)
+						if Apollo.IsControlKeyDown() and eMouseButton == GameLib.CodeEnumInputMouse.Right then
+							if wndHandler:GetData():GetHousingDecorInfoId() ~= nil and wndHandler:GetData():GetHousingDecorInfoId() ~= 0 then
 								Event_FireGenericEvent("DecorPreviewOpen", wndHandler:GetData():GetHousingDecorInfoId())
 								return
 							else
 								self:OnShowItemInDressingRoom(wndHandler:GetData())
 								return
 							end		
-        		end
-		end
-		end
-		
-		--[[
-			QUEST REWARD
-						]]--
-		for key,val in pairs(suppDialogs) do
-			DialogAddon = Apollo.GetAddon(val)
-		
-			if DialogAddon ~= nil then
-				break
-			end
-		end
-	
-		if DialogAddon == nil then
-	
-			ChatSystemLib.PostOnChannel(2,"ItemPreviewImproved: Could not load any supported Dialog addon! \nPlease contact the author of the addon via Curse!")
-		else	
-			fHelperBuildItemToolTip = DialogAddon.HelperBuildItemTooltip
-			DialogAddon.HelperBuildItemTooltip = HelperBuildItemTooltipHook
-		
-			DialogAddon.OnMouseButtonUp = function (luaCaller, wndHandler, wndControl, eMouseButton)
-
-				if Apollo.IsControlKeyDown() and eMouseButton == GameLib.CodeEnumInputMouse.Right then
-						self:OnShowItemInDressingRoom(wndHandler:GetData())
-        		end
-		
-			end
-		end
-		
-		--[[
-			QuestLog
-						]]--
-		for key,val in pairs(suppQuestlogs) do
-			QuestLogAddon = Apollo.GetAddon(val)
-			
-			if QuestLogAddon ~= nil then
-				break
-			end
-		end
-		
-		if QuestLogAddon == nil then
-		
-		ChatSystemLib.PostOnChannel(2,"ItemPreviewImproved: Could not load any supported QuestLog addon! \nPlease contact the author of the addon via Curse!")	
-		
-		else
-		
-			fHelperBuildRewardsRec = QuestLogAddon.HelperBuildRewardsRec
-			QuestLogAddon.HelperBuildRewardsRec = HelperBuildRewardsRecHook
-			
-			QuestLogAddon.OnMouseButtonUp = function (luaCaller, wndHandler, wndControl, eMouseButton)
-		
-				if Apollo.IsControlKeyDown() and eMouseButton == GameLib.CodeEnumInputMouse.Right then
-						self:OnShowItemInDressingRoom(wndHandler:GetData())
-        		end
-		
-			end
-		
-		end
-		--[[
-			CHAT LINKS
-						]]--
-		
-		for key,val in pairs(suppChats) do
-			ChatAddon = Apollo.GetAddon(val["name"])
-			
-			if ChatAddon ~= nil then
-				ChatAddonXML = val["xml"]
-				ChatAddonName = val["name"]
-				break
-			end
-		end
-		
-		if ChatAddon == nil then
-			ChatSystemLib.PostOnChannel(2,"ItemPreviewImproved: Could not load any supported ChatLog addon! \nPlease contact the author of the addon via Curse!")
-		else
-		
-		ChatAddon.OnNodeClick = function (luaCaller, wndHandler, wndControl, strNode, tAttributes, eMouseButton)
-			-- can only report players who are not yourself, which matches who we want this menu for.
-			if strNode == "Source" and eMouseButton == GameLib.CodeEnumInputMouse.Right and tAttributes.CharacterName and tAttributes.nReportId then
-				Event_FireGenericEvent("GenericEvent_NewContextMenuPlayer", wndHandler, tAttributes.CharacterName, nil, tAttributes.nReportId)
-				return true
-			end
-
-			if strNode == "Link" then
-	
-				-- note, tAttributes.nLinkIndex is a string value, instead of the int we passed in because it was saved
-				-- 	out as xml text then read back in.
-				local nIndex = tonumber(tAttributes.strIndex)
-
-				if ChatAddon.tLinks[nIndex] and
-					( ChatAddon.tLinks[nIndex].uItem or ChatAddon.tLinks[nIndex].uQuest or ChatAddon.tLinks[nIndex].uArchiveArticle ) then
-	
-					if Apollo.IsShiftKeyDown() then
-	
-						local wndEdit = ChatAddon.HelperGetCurrentEditbox(luaCaller)
-	
-						-- pump link to the chat line
-						if wndEdit then
-							ChatAddon.HelperAppendLink(luaCaller,wndEdit,ChatAddon.tLinks[nIndex])
-						end
-					else
-					if ChatAddon.tLinks[nIndex].uItem then
-				
-						if Apollo.IsControlKeyDown() == true and eMouseButton == GameLib.CodeEnumInputMouse.Right then
-					
-							if ChatAddon.tLinks[nIndex].uItem:GetHousingDecorInfoId() ~= nil and ChatAddon.tLinks[nIndex].uItem:GetHousingDecorInfoId() ~= 0 then
-								Event_FireGenericEvent("DecorPreviewOpen", ChatAddon.tLinks[nIndex].uItem:GetHousingDecorInfoId())
-								return
-							else
-								Event_FireGenericEvent("ShowItemInDressingRoom", ChatAddon.tLinks[nIndex].uItem)
-								return
-							end						
-						end
-
-					
-						local bWindowExists = false
-						for idx, wndCur in pairs(ChatAddon.twndItemLinkTooltips or {}) do
-							if wndCur:GetData() == ChatAddon.tLinks[nIndex].uItem then
-								bWindowExists = true
-								break
-							end
-						end
-				
-						if bWindowExists == false then
-						
-							-- Change some functionality because BetterChatLog isn't up to date with Tooltips
-							if ChatAddonName == "BetterChatLog" or ChatAddonName == "FixedChatLog" then
-							
-								itemCurr = ChatAddon.tLinks[nIndex].uItem
-								wndControl:SetTooltipDoc(nil)
-
-								local itemEquipped = itemCurr:GetEquippedItemForItemType()
-								Tooltip.GetItemTooltipForm(Chataddon, wndHandler, itemCurr, {bPrimary = true, bSelling = false, itemCompare = itemEquipped})
-							else
-								local wndChatItemToolTip = Apollo.LoadForm(ChatAddonXML, "TooltipWindow", nil, ChatAddon)
-								wndChatItemToolTip:SetData(ChatAddon.tLinks[nIndex].uItem)
-						
-								table.insert(ChatAddon.twndItemLinkTooltips, wndChatItemToolTip)
-							
-								local itemEquipped = ChatAddon.tLinks[nIndex].uItem:GetEquippedItemForItemType()
-												
-								local wndLink = Tooltip.GetItemTooltipForm(ChatAddon, wndControl, ChatAddon.tLinks[nIndex].uItem, {bPermanent = true, wndParent = wndChatItemToolTip, bSelling = false, bNotEquipped = true})
-						
-								local nLeftWnd, nTopWnd, nRightWnd, nBottomWnd = wndChatItemToolTip:GetAnchorOffsets()
-								local nLeft, nTop, nRight, nBottom = wndLink:GetAnchorOffsets()
-						
-								wndChatItemToolTip:SetAnchorOffsets(nLeftWnd, nTopWnd, nLeftWnd + nRight + 15, nBottom + 75)
-						
-								if itemEquipped then
-									wndChatItemToolTip:SetTooltipDoc(nil)
-									Tooltip.GetItemTooltipForm(ChatAddon, wndChatItemToolTip, itemEquipped, {bPrimary = true, bSelling = false, bNotEquipped = false})
-								end
-							end
-							end
-					
-					elseif ChatAddon.tLinks[nIndex].uQuest then
-						Event_FireGenericEvent("ShowQuestLog", wndHandler:GetData()) -- Codex (todo: deprecate this)
-						Event_FireGenericEvent("GenericEvent_ShowQuestLog", ChatAddon.tLinks[nIndex].uQuest)
-					elseif ChatAddon.tLinks[nIndex].uArchiveArticle then
-						Event_FireGenericEvent("HudAlert_ToggleLoreWindow")
-						Event_FireGenericEvent("GenericEvent_ShowGalacticArchive", ChatAddon.tLinks[nIndex].uArchiveArticle)
-					end
+        				end
 				end
-			end
 		end
+	end
+	end
+end 
 
-		return false
+function ItemPreviewImproved:OnIconBlockerClick(luaCaller, wndHandler, wndControl, eMouseButton)
+	if wndHandler ~= wndControl then return end
+	
+	local bCanSelect = wndControl:GetData()
+	local wndBtn = wndControl:GetParent():FindChild("ChallengeItemBtn")
+	
+	if Apollo.IsControlKeyDown() and eMouseButton == GameLib.CodeEnumInputMouse.Right then
+		local item = wndControl:GetData()
+		if item:GetHousingDecorInfoId() ~= nil and item:GetHousingDecorInfoId() ~= 0 then
+			Event_FireGenericEvent("DecorPreviewOpen", item:GetHousingDecorInfoId())
+			return
+		else
+			self:OnShowItemInDressingRoom(item)
+			return
+		end
+	elseif not Apollo.IsControlKeyDown() and eMouseButton == GameLib.CodeEnumInputMouse.Left then
+		ChallengeAddon:OnChallengeItemBtn(wndBtn, wndBtn)
 	end
 end
+
+function ItemPreviewImproved:OnSchematicsInitialize()
+	Apollo.StartTimer("SchematicsHook")
 end
-
-
------------------------------------------------------------------------------------------------
--- ItemPreviewImproved Functions
------------------------------------------------------------------------------------------------
--- Define general functions here
 
 function ItemPreviewImproved:UpdateCostume()
 	self.wndMain:FindChild("PreviewWindow"):SetCostume(GameLib.GetPlayerUnit())
 	for key,val in pairs(currPreviewedItems) do
 		self.wndMain:FindChild("PreviewWindow"):SetItem(val)
 	end
-end 
+end
 
-function TradeskillHelperBuildItemTooltipHook(luaCaller, wndArg, item)
-	fTradeskillHelperBuildItemToolTip(luaCaller, wndArg, item)
+function ItemPreviewImproved:OnAppearanceChanged()
+	self.wndMain:FindChild("PreviewWindow"):SetCostume(nil)
+	Apollo.StartTimer("AppearanceChangedTimer")
+end
+
+function ItemPreviewImproved:OnGenerateTooltip(luaCaller, wndControl, wndHandler, eType, Arg1, Arg2)
+	if eType == Tooltip.TooltipGenerateType_ItemData then
+		local itemReward = Arg1
+		wndControl:GetParent():FindChild("LootIconBlocker"):SetData(itemReward)
+	end
+end
+
+function ItemPreviewImproved:HelperBuildItemTooltip(luaCaller, wndArg, itemCurr, itemModData, tGlyphData)
+	wndArg:AddEventHandler("MouseButtonUp", "OnMouseButtonUp")
+	wndArg:SetData(itemCurr)
+end
+
+function ItemPreviewImproved:OnNodeClick(luaCaller, wndHandler, wndControl, strNode, tAttributes, eMouseButton)
+	local nIndex = tonumber(tAttributes.strIndex)
+	if strNode == "Link" then
+		if ChatAddon.tLinks[nIndex].uItem then
+			if Apollo.IsControlKeyDown() == true and eMouseButton == GameLib.CodeEnumInputMouse.Right then		
+				if ChatAddon.tLinks[nIndex].uItem:GetHousingDecorInfoId() ~= nil and ChatAddon.tLinks[nIndex].uItem:GetHousingDecorInfoId() ~= 0 then
+					Event_FireGenericEvent("DecorPreviewOpen", ChatAddon.tLinks[nIndex].uItem:GetHousingDecorInfoId())
+					return
+				else
+					Event_FireGenericEvent("ShowItemInDressingRoom", ChatAddon.tLinks[nIndex].uItem)
+					return
+				end						
+			end
+		end
+	end
+end
+
+function ItemPreviewImproved:OnVendorListItemMouseDown(luaCaller, wndHandler, wndControl, eMouseButton, nPosX, nPosY, bDoubleClick)
+	if eMouseButton == GameLib.CodeEnumInputMouse.Right and Apollo.IsControlKeyDown() then
+			if not wndHandler or not wndHandler:GetData() then return end
+		    local tItemPreview = wndHandler:GetData()
+		    if tItemPreview and tItemPreview.itemData then
+		        local itemCurr = tItemPreview.itemData
+		        local itemID = itemCurr:GetItemId()
+				local itemName = itemCurr:GetName()
+				local previewWindow = Apollo.FindWindowByName("ItemPreviewImprovedMountForm")
+
+				for idx, val in pairs(tMounts) do
+					if itemID == val["Item_ID"] then
+						if val["Mount_ID"] ~= nil then
+							if previewWindow:FindChild("noMount"):IsShown() then
+								previewWindow:FindChild("noMount"):Show(false)
+							end
+							previewWindow:FindChild("MountPortrait"):SetCamera("Paperdoll")
+							previewWindow:FindChild("MountPortrait"):SetCostumeToCreatureId(val["Mount_ID"])
+							if val["Hoverboard_ID"] ~= 0 then
+								previewWindow:FindChild("MountPortrait"):SetAttachment(PetCustomizationLib.HoverboardAttachmentPoint, val["Hoverboard_ID"])
+							end
+							
+							if previewWindow:FindChild("btnInformation"):IsShown() then
+								previewWindow:FindChild("btnInformation"):Show(false)
+							end
+						else
+							previewWindow:FindChild("MountPortrait"):SetCostume(nil)
+							previewWindow:FindChild("noMount"):Show(true)
+							previewWindow:FindChild("btnInformation"):Show(true)
+						end
+						previewWindow:Show(true)
+					end
+				end
+			end		
+		end	
+end
+
+function ItemPreviewImproved:HelperBuildItemTooltip(luaCaller, wndArg, item)
 	wndArg:AddEventHandler("MouseButtonUp", "OnMouseButtonUp")
 	wndArg:SetData(item)
 end
 
-function HelperBuildRewardsRecHook(luaCaller, wndReward, tRewardData, bReceived)
-	fHelperBuildRewardsRec(luaCaller, wndReward, tRewardData, bReceived)
+function ItemPreviewImproved:HelperBuildRewardsRec(luaCaller, wndReward, tRewardData, bReceived)
 	wndReward:AddEventHandler("MouseButtonUp", "OnMouseButtonUp")
 	wndReward:SetData(tRewardData.itemReward)
 end
 
-function HelperBuildItemTooltipHook(luaCaller, wndArg, item)
-	fHelperBuildItemToolTip(luaCaller, wndArg, item)
+function ItemPreviewImproved:HelperBuildItemTooltip(luaCaller, wndArg, item)
 	wndArg:AddEventHandler("MouseButtonUp", "OnMouseButtonUp")
 	wndArg:SetData(item)
 end
 
-function ItemPreviewImproved:DelayTimer()
-       Apollo.StartTimer("EventThresholdTimer")
-end
- 
-function ItemPreviewImproved:ItemPreviewFormOpenCallback()
-        local wndImpSalv = Apollo.FindWindowByName("ItemPreviewForm")
-        if wndImpSalv and wndImpSalv:IsShown() then
-               wndImpSalv:Show(false)
-			   wndImpSalv:Destroy()
-        end
-end
-
 function ItemPreviewImproved:OnShowItemInDressingRoom(item)
-self:DelayTimer()
-
+	
+	previewAddon = Apollo.GetAddon("ItemPreview")
+		if previewAddon ~= nil then
+			if previewAddon.wndMain and previewAddon.wndMain:IsShown() then
+				previewAddon.wndMain:Show(false)
+				previewAddon.wndMain:Destroy()
+			end
+		end
+	
 	if item == nil or not self:HelperValidateSlot(item) then
 		return
 	end
 	
-	if playerunit == nil or playerunit ~= GameLib.GetPlayerUnit() then
+	if playerunit == nil then
 		self.wndMain:FindChild("PreviewWindow"):SetCostume(GameLib.GetPlayerUnit())
 		playerunit = GameLib.GetPlayerUnit()
 	end
 	
-	local nWndLeft, nWndTop, nWndRight, nWndBottom = self.wndMain:GetRect()
-	local nWndWidth = nWndRight - nWndLeft
-	local nWndHeight = nWndBottom - nWndTop
-	self.wndMain:SetSizingMinimum(nWndWidth - 10, nWndHeight - 10)
+	self:SwitchMode(lightMode)
+	
+	self:SetSizingMinimum(lightMode)
+	
 	self.wndMain:FindChild("PreviewWindow"):SetItem(item)
-
 	
 	if self.locSavedWindowLoc then
 		self.wndMain:MoveToLocation(self.locSavedWindowLoc)
 	end
 
-
-	-- set item name;
-	--local strLabel = string.format("<T Font=\"CRB_InterfaceMedium\" TextColor=\"UI_TextHoloBody\" Align=\"Center\">%s</T>", Apollo.GetString("Inventory_ItemPreviewLabel"))
 	local strItem = item:GetName()
 	
 	if ktVisibleSlots[1] == item:GetSlot() then
@@ -597,8 +844,6 @@ self:DelayTimer()
 
 	self.wndMain:FindChild("PreviewWindow"):SetSheathed(self.bSheathed)
 	self:HelperFormatSheathButton(self.bSheathed)
-
-	self.wndMain:Show(true)
 	
 	self.wndCostumeSelectionList = self.wndMain:FindChild("Middle:CostumeBtnHolder")
 	self.wndCostumeSelectionList:Show(false)
@@ -630,6 +875,8 @@ self:DelayTimer()
 	
 	local nLeft, nTop, nRight, nBottom = self.wndMain:FindChild("CostumeBtnHolder"):GetAnchorOffsets()
 	self.wndMain:FindChild("CostumeBtnHolder"):SetAnchorOffsets(nLeft, nBottom - (75 + 28 * self.nCostumeCount), nRight, nBottom)
+	
+	self.wndMain:Show(true)
 end
 
 function ItemPreviewImproved:HelperCheckForWeapon(eItemType)
@@ -653,6 +900,33 @@ end
 function ItemPreviewImproved:HelperValidateSlot(item)
 	local bVisibleSlot = false
 	local bRightClassOrProf = false
+	if string.find(item:GetName(), "FABkit") or string.find(item:GetName(), "FABKit") then
+				for key,tItemData in pairs(ktFABkits) do
+					local strName = tItemData.strName
+					
+					if string.find(item:GetName(), "Biome") and string.find(tItemData.strName, "Biome: ")then
+						strName = string.gsub(tItemData.strName, "Biome: ", "").. " Biome"
+					end
+					if strName.." FABkit" == item:GetName() and #tItemData.tScreenshots >= 1 then
+						self.tScreenshots = tItemData.tScreenshots
+						self.nCurrSS = 1
+						self.wndFABkit:FindChild("Picture"):SetSprite(tItemData.tScreenshots[1].strSprite)
+						self.wndFABkit:Show(true)
+						if #tItemData.tRepairRequirements > 0 then
+							if tItemData.tRepairRequirements[1].eType == 1 then
+								self.wndFABkit:FindChild("Cost"):Show(true)
+								self.wndFABkit:FindChild("Cost"):SetAmount(tItemData.tRepairRequirements[1].nRequiredCost)
+							else
+								self.wndFABkit:FindChild("Cost"):SetAmount(0)
+							end
+						else
+							self.wndFABkit:FindChild("Cost"):SetAmount(0)
+						end
+						self.wndFABkit:FindChild("Description"):SetText(tItemData.strTooltip)
+						self.wndFABkit:ToFront()
+					end
+				end
+			end
 	for idx, nSlot in pairs(ktVisibleSlots) do
 		if item:GetSlot() and item:GetSlot() == nSlot then --item:GetSlot() and
 			bRightClassOrProf = true
@@ -682,8 +956,7 @@ function ItemPreviewImproved:OnToggleSheathButton( wndHandler, wndControl, eMous
 end
 
 function ItemPreviewImproved:OnCloseBtn( wndHandler, wndControl, eMouseButton )
-	--self.wndMain:FindChild("PreviewWindow"):SetCostume(nil)
-	
+	self.wndMain:Show(false)
 end
 
 function ItemPreviewImproved:OnInfo()
@@ -703,19 +976,35 @@ function ItemPreviewImproved:OnToggleSheathed( wndHandler, wndControl, eMouseBut
 end
 
 function ItemPreviewImproved:OnRotateRight()
-	self.wndMain:FindChild("PreviewWindow"):ToggleLeftSpin(true)
+	if self.wndMain:IsShown() then
+		self.wndMain:FindChild("PreviewWindow"):ToggleLeftSpin(true)
+	else
+		self.wndMount:FindChild("MountPortrait"):ToggleLeftSpin(true)
+	end	
 end
 
 function ItemPreviewImproved:OnRotateRightCancel()
-	self.wndMain:FindChild("PreviewWindow"):ToggleLeftSpin(false)
+	if self.wndMain:IsShown() then
+		self.wndMain:FindChild("PreviewWindow"):ToggleLeftSpin(false)
+	else
+		self.wndMount:FindChild("MountPortrait"):ToggleLeftSpin(false)
+	end	
 end
 
 function ItemPreviewImproved:OnRotateLeft()
-	self.wndMain:FindChild("PreviewWindow"):ToggleRightSpin(true)
+	if self.wndMain:IsShown() then
+		self.wndMain:FindChild("PreviewWindow"):ToggleRightSpin(true)
+	else
+		self.wndMount:FindChild("MountPortrait"):ToggleRightSpin(true)
+	end
 end
 
 function ItemPreviewImproved:OnRotateLeftCancel()
-	self.wndMain:FindChild("PreviewWindow"):ToggleRightSpin(false)
+	if self.wndMain:IsShown() then
+		self.wndMain:FindChild("PreviewWindow"):ToggleRightSpin(false)
+	else
+		self.wndMount:FindChild("MountPortrait"):ToggleRightSpin(false)
+	end
 end
 
 function ItemPreviewImproved:OnReset()
@@ -830,10 +1119,20 @@ end
 
 function ItemPreviewImproved:CostumeSelectionWindowShow()
 	self.wndCostumeSelectionList:Show(true)
+	self.wndMain:FindChild("btnLock"):FindChild("bgArt"):Show(false)
+	if lightMode == true then
+		self.wndMain:FindChild("btnLightSheath"):FindChild("bgArt"):Show(false)
+		self.wndMain:FindChild("btnLightReset"):FindChild("bgArt"):Show(false)
+	end
 end
 
 function ItemPreviewImproved:CostumeSelectionWindowHide()
 	self.wndCostumeSelectionList:Show(false)
+	self.wndMain:FindChild("btnLock"):FindChild("bgArt"):Show(true)
+	if lightMode == true then
+		self.wndMain:FindChild("btnLightSheath"):FindChild("bgArt"):Show(true)
+		self.wndMain:FindChild("btnLightReset"):FindChild("bgArt"):Show(true)
+	end
 end
 
 function ItemPreviewImproved:OnCostumeBtnToggle(wndHandler, wndCtrl)
@@ -851,8 +1150,11 @@ function ItemPreviewImproved:OnCostumeBtnToggle(wndHandler, wndCtrl)
 			self.nCurrentCostume = 0
 		end
 	end
-
-	self.wndMain:FindChild("Middle:BGArt_HeaderFrame:SelectCostumeWindowToggle"):SetCheck(false)
+	if self.wndMain:FindChild("SelectCostumeWindowToggle"):IsShown() then
+		self.wndMain:FindChild("Middle:BGArt_HeaderFrame:SelectCostumeWindowToggle"):SetCheck(false)
+	else
+		self.wndMain:FindChild("btnLightCostumeToggle"):SetCheck(false)
+	end
 	self.wndCostumeSelectionList:Show(false)
 	
 	if self.nCurrentCostume > 0 and self.nCurrentCostume ~= nil then
@@ -865,10 +1167,72 @@ function ItemPreviewImproved:OnCostumeBtnToggle(wndHandler, wndCtrl)
 		GameLib.SetCostumeIndex(self.nCurrentCostume)
 		self.wndMain:FindChild("SelectCostumeWindowToggle"):SetText(Apollo.GetString("Character_CostumeSelectDefault"))
 	end
-		self.wndMain:FindChild("PreviewWindow"):SetCostume(nil)
-		Apollo.StartTimer("UpdateCostume")
+	
+	self.wndMain:FindChild("btnLock"):FindChild("bgArt"):Show(true)
+	if lightMode == true then
+		self.wndMain:FindChild("btnLightSheath"):FindChild("bgArt"):Show(true)
+		self.wndMain:FindChild("btnLightReset"):FindChild("bgArt"):Show(true)
+	end
 end
 
+function ItemPreviewImproved:OnCloseMountPreview()
+	self.wndMount:Show(false)
+end
+
+function ItemPreviewImproved:OnLockOn()
+	self.wndMain:SetStyle("Moveable", false)
+	self.wndMain:SetStyle("Sizable", false)
+end
+
+function ItemPreviewImproved:OnLockOff()
+	self.wndMain:SetStyle("Moveable", true)
+	self.wndMain:SetStyle("Sizable", true)
+end
+
+function ItemPreviewImproved:LightModeOn()
+	lightMode = true
+	self:SwitchMode(lightMode)
+	self:SetSizingMinimum(lightMode)
+	nl, nt, nr, nb = self.wndMain:GetAnchorOffsets()
+end
+
+function ItemPreviewImproved:LightModeOff()
+	lightMode = false
+	self:SwitchMode(lightMode)
+	self:SetSizingMinimum(lightMode)
+	self.wndMain:SetAnchorOffsets(nl, nt, nr, nb)
+end
+
+function ItemPreviewImproved:SwitchMode(state)
+	self.wndMain:FindChild("btnLightSheath"):Show(state)
+	self.wndMain:FindChild("btnLightReset"):Show(state)
+	self.wndMain:FindChild("btnLightCostumeToggle"):Show(state)
+	self.wndMain:FindChild("SheathButton"):Show(not state)
+	self.wndMain:FindChild("ResetButton"):Show(not state)
+	self.wndMain:FindChild("SelectCostumeWindowToggle"):Show(not state)
+end
+
+function ItemPreviewImproved:SetSizingMinimum(state)
+	if not state then
+		local nWndLeft, nWndTop, nWndRight, nWndBottom = 462, 191, 811, 764
+		local nWndWidth = nWndRight - nWndLeft
+		local nWndHeight = nWndBottom - nWndTop
+		self.wndMain:SetSizingMinimum(nWndWidth, nWndHeight)
+	else
+		self.wndMain:SetSizingMinimum(0, 0)
+	end
+end
+
+function ItemPreviewImproved:ShowNoMountInfo()
+	local output = "The mount you want to preview is currently \n not part of the mount table in ItemPreviewImproved!\n"
+	output = output .. "To help the addon to get more mounts for preview install\n ItemPreviewImproved: MountTracker and follow the instructions!"
+	self.wndMount:FindChild("noMountInformation"):FindChild("lblNoMountInformation"):SetText(output)
+	if self.wndMount:FindChild("noMountInformation"):IsShown() then
+		self.wndMount:FindChild("noMountInformation"):Show(false)
+	else
+		self.wndMount:FindChild("noMountInformation"):Show(true)
+	end
+end
 -----------------------------------------------------------------------------------------------
 -- ItemPreviewImproved Instance
 -----------------------------------------------------------------------------------------------

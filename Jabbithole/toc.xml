@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Addon Author="Jabbithole" APIVersion="8" Name="Jabbithole" Description="Collects in-game data as you play to be imported into Jabbithole.com." Version="0.0.17">
+    <Script Name="Jabbithole.lua"/>
+    <Form Name="Jabbithole.xml"/>
+</Addon>

@@ -91,6 +91,21 @@ local karCurrency =  	-- Alt currency table; re-indexing the enums so they don't
 
 local origItemToolTipForm = nil
 
+-- Mapping of recipes whose names don't match the items they create.
+-- The key is the ID of the recipe item; the value is the correct title of the item
+-- created by the recipe.
+--
+local kGenBogusRecipes = {
+		[18761] = 'Spider Stir Fry',
+		[29632] = 'Enhanced Spider Stir-Fry',
+		
+		-- Reported by one of our users, but Jabbithole's info on these is weird
+		-- so I want to corroborate.
+		--
+		-- [36086] = 'Galeras Adaptive Vanguard System',
+		-- [36085] = 'Galehorn Roanhide Chaps',
+}
+	
 -----------------------------------------------------------------------------------------------
 -- Initialization
 -----------------------------------------------------------------------------------------------
@@ -102,6 +117,8 @@ function Generalist:new(o)
     -- initialize variables here
 	o.tItems = {} -- keep track of all the list items
 	o.altData = {}
+	o.recipeBogus = kGenBogusRecipes
+	
 	-- o.wndSelectedListItem = nil -- keep track of which list item is currently selected
 	
     return o
@@ -126,6 +143,9 @@ function Generalist:OnLoad()
 	
 	-- load our version info
 	self.version = XmlDoc.CreateFromFile("toc.xml"):ToTable().Version
+	
+	-- set up mappings for bogus recipe items
+	--self:PopulateBogusRecipeList()
 		
 	-- init hook for tooltips
 	local TT = Apollo.GetAddon("ToolTips")
@@ -189,6 +209,11 @@ function Generalist:OnDocLoaded()
 		-- Get ourselves into the Interface menu
 		Apollo.RegisterEventHandler("InterfaceMenuListHasLoaded", "OnInterfaceMenuListHasLoaded", self)
 		Apollo.RegisterEventHandler("ToggleGeneralist", "OnGeneralistOn", self)
+		
+		-- Update my tradeskills when I learn a new one
+		Apollo.RegisterEventHandler("TradeskillAchievementComplete", "GetTradeskills", self)
+		Apollo.RegisterEventHandler("TradeSkills_Learned", "GetTradeskills", self)
+		Apollo.RegisterEventHandler("CraftingSchematicLearned", "GetTradeskills", self)
 		
 		-- Update my inventory when I loot stuff
 		Apollo.RegisterEventHandler("LootedItem", "GetCharInventory", self)
@@ -311,7 +336,9 @@ function Generalist:PopulateCharList()
 	-- Sort the list (alphabetically)
     table.sort(a)
 	
-	-- Now loop through the table of data and add all characters to the list item
+	-- Now loop through the faction list and add those characters to the list item.
+	-- Track total cash and levels as we go.
+	--
 	local totalCash = 0
 	local totalLevel = 0
 	local cc
@@ -330,7 +357,7 @@ function Generalist:PopulateCharList()
 		cc = counter
 	end
 	
-	-- Now, add the total cash entry
+	-- Now, add the total cash/levels entry
 	cc = cc+1
 	local wnd = Apollo.LoadForm(self.xmlDoc, "CharListEntry", self.charList, self)
 	self.tItems[cc] = wnd
@@ -340,11 +367,15 @@ function Generalist:PopulateCharList()
 	wnd:FindChild("CharClass"):Show(false)
 	wnd:FindChild("CharPath"):Show(false)
 				
-	-- now all the item are added, call ArrangeChildrenVert to list out the list items vertically
+	-- now all the chars and total are added, 
+	-- call ArrangeChildrenVert to list out the list items vertically
+	--
 	self.charList:ArrangeChildrenVert()
+	
 end
 
--- clear the item list
+-- Clear the character list
+--
 function Generalist:DestroyCharList()
 	-- destroy all the wnd inside the list
 	for idx,wnd in ipairs(self.tItems) do
@@ -458,12 +489,19 @@ function Generalist:UpdateCurrentCharacter()
 	-- Dyes
 	self:GetCharDyes()
 	
+	-- Rep
+	self:GetCharReputations()
+	
 	
 end
 
 -----------------------------------------------------------------------------------------------
 -- Functions for storing particular parts of the current character's data
 -----------------------------------------------------------------------------------------------
+
+----------------------------
+-- Character's level
+----------------------------
 
 function Generalist:GetCharLevel()
 
@@ -475,6 +513,10 @@ function Generalist:GetCharLevel()
 		
 end
 
+----------------------------
+-- Character's cash
+----------------------------
+
 function Generalist:GetCharCash()
 
 	local unitPlayer = GameLib.GetPlayerUnit()
@@ -484,6 +526,10 @@ function Generalist:GetCharCash()
 	self.altData[myName].cash = GameLib.GetPlayerCurrency():GetAmount()
 		
 end
+
+----------------------------
+-- Character's inventory
+----------------------------
 
 function Generalist:GetCharInventory()
 
@@ -581,6 +627,10 @@ function Generalist:GetCharInventory()
 	
 end
 
+----------------------------
+-- Character's currencies
+----------------------------
+
 function Generalist:GetCharCurrency()
 
 	-- If possible, get my name.
@@ -610,6 +660,10 @@ function Generalist:GetCharCurrency()
 
 end
 
+----------------------------
+-- Character's unlocked amps
+----------------------------
+
 function Generalist:GetUnlockedAmps()
 
 	-- If possible, get my name.
@@ -636,8 +690,123 @@ function Generalist:GetUnlockedAmps()
 	self.altData[myName].unlocked = unlocked
 end
 
-function Generalist:GetTradeskills()
+----------------------------
+-- Character's reputations
+----------------------------
 
+function Generalist:GetCharReputations()
+
+	-- If possible, get my name.
+	local unitPlayer = GameLib.GetPlayerUnit()
+	if unitPlayer == nil then return end
+	local myName = unitPlayer:GetName()
+	if self.altData[myName] == nil then self.altData[myName] = {} end
+	
+	-- Get reputations
+	local tReputations = GameLib.GetReputationInfo()
+	if not tReputations then
+		return
+	end
+	
+	-- Blow away old entries
+	self.altData[myName].reputation = {}
+	
+	-- The new list
+	local repTable = {}
+	local repList = {}
+	
+	-- First, get simple list of all faction names, parents, and values
+	local facParent = {}
+	local hasChildren = {}
+	for idx, tFaction in pairs(tReputations) do			
+		if tFaction.strParent ~= '' then
+			facParent[tFaction.strName] = tFaction.strParent
+			hasChildren[tFaction.strParent] = 1
+			-- Print (tFaction.strParent .. " is parent of " .. tFaction.strName)
+		end
+		-- But is this a real rep?
+		repList[tFaction.strName] = 1
+	end
+	
+	-- Loop through them again
+	for idx, tFaction in pairs(tReputations) do
+		-- Get the name
+		local fac
+		
+		-- We only care if it has a value.
+		if tFaction.nCurrent ~= nil then
+		
+			-- Is it a real rep? i.e. does it have a legit top level?
+			local realRep = 0
+		
+			-- If it has no parent, then it's a top level faction
+			if tFaction.strParent == '' then
+		
+				-- We only include it if it has kids too.
+				-- This will exclude "Holiday".
+				-- 
+				if hasChildren[tFaction.strName] ~= nil then
+					fac = tFaction.strName
+					realRep = 1
+				end
+					
+			else
+			
+				-- Is its parent a real rep?
+				if repList[tFaction.strParent] ~= nil then
+		
+					-- Does it have a grandparent?
+					if facParent[tFaction.strParent] == nil then
+			
+						-- No.  But its parent is legit.  So do it.
+						fac = tFaction.strParent .. ":\n" .. tFaction.strName
+						realRep = 1
+				
+					else 
+			
+						-- It has both.  Is the grandparent real?
+						if repList[facParent[tFaction.strParent]] ~= nil then
+					
+							-- Yup, gramps is legit.  So do it.
+							realRep = 1
+							fac = facParent[tFaction.strParent]
+							fac = fac .. ": " .. tFaction.strParent .. ":\n" .. tFaction.strName
+
+						end -- is grandparent real?
+					
+					end -- does it have a grandparent?
+				
+				end -- is parent real?
+			
+			end -- does it have a parent?
+			
+			-- Still here?  If it's a real rep, add it.
+			if realRep == 1 then
+				local tRep = {}
+				tRep.level = tFaction.nLevel
+				tRep.value = tFaction.nCurrent
+				tRep.name = fac
+				table.insert(repTable, tRep)
+			end
+			
+		end -- does it have a value?
+		
+	end -- of loop over Factions
+	
+	-- Now sort the list
+	table.sort(repTable, function (a,b) return a.name < b.name end)	
+	
+	-- And store it
+	self.altData[myName].reputation = repTable
+		
+end -- of gathering rep
+
+----------------------------
+-- Character's tradeskills
+----------------------------
+
+function Generalist:GetTradeskills()
+	
 	-- If possible, get my name.
 	local unitPlayer = GameLib.GetPlayerUnit()
 	if unitPlayer == nil then return end
@@ -716,6 +885,10 @@ function Generalist:GetTradeskills()
 	
 end
 
+----------------------------
+-- Character's equipped items
+----------------------------
+
 function Generalist:GetCharEquipment()
 
 	-- If possible, get my name.
@@ -730,6 +903,7 @@ function Generalist:GetCharEquipment()
 	local eq = unitPlayer:GetEquippedItems()
 	local equipment = {}
 	self.altData[myName].fullItem = {}
+	self.altData[myName].chatLink = {}
 	for key, itemEquipped in pairs(eq) do
 		
 		-- What slot does this item go in?
@@ -747,11 +921,16 @@ function Generalist:GetCharEquipment()
 		end
 	
 		equipment[theSlot] = itemEquipped:GetItemId()
-		self.altData[myName].fullItem[theSlot] = itemEquipped:GetDetailedInfo()
+		self.altData[myName].fullItem[theSlot] = itemEquipped
+		self.altData[myName].chatLink[theSlot] = itemEquipped:GetChatLinkString()
 		
 	end 
 	self.altData[myName].equipment = equipment
 end
+
+----------------------------
+-- Character's dyes
+----------------------------
 
 function Generalist:GetCharDyes()
 	
@@ -776,8 +955,9 @@ function Generalist:GetCharDyes()
 end
 
 -----------------------------------------------------------------------------------------------
--- Generate a Chat Link
+-- Generate a Chat Link for an item
 -----------------------------------------------------------------------------------------------
+
 function Generalist:OnGenerateItemLink(wndHandler,wndControl)
     -- make sure the wndControl is valid
     if wndHandler ~= wndControl then
@@ -917,6 +1097,12 @@ function Generalist:PopulateDetailWindow(charName)
 		self.wndAmps:FindChild("TradeskillPickerList"), self)
 	wndDyes:SetData('dyes')
 	wndDyes:SetText('Dyes')	
+	
+	-- Next, sneak dyes in
+	local wndRep = Apollo.LoadForm(self.xmlDoc, "TradeskillBtn", 
+		self.wndAmps:FindChild("TradeskillPickerList"), self)
+	wndDyes:SetData('reputation')
+	wndDyes:SetText('Reputation')	
 	
 	-- Finally, do the tradeskills
 	if entry.tradeSkills ~= nil and table.getn(entry.tradeSkills) > 0 then
@@ -1071,8 +1257,8 @@ function Generalist:EnsureBackwardsCompatibility(myName)
 	end
 	
 	-- Unlocked
-	if self.altData[myName].inventory == nil then
-		self.altData[myName].inventory = {}
+	if self.altData[myName].unlocked == nil then
+		self.altData[myName].unlocked = {}
 	end
 	
 	-- Currency
@@ -1088,6 +1274,11 @@ function Generalist:EnsureBackwardsCompatibility(myName)
 	-- Zone
 	if self.altData[myName].zone == nil then
 		self.altData[myName].zone = '(Unknown location)'
+	end
+	
+	-- Reputation
+	if self.altData[myName].reputation == nil then
+		self.altData[myName].reputation = {}
 	end
 	
 end
@@ -1214,6 +1405,24 @@ function Generalist:OnAmpTradePicked( wndHandler, wndControl, eMouseButton )
 		
 			end -- if we have this type of currency
 		
+		end
+		
+	elseif pickedSkill == 'reputation' then -- rep
+	
+		-- Reputation level names and sizes
+		repLevels = GameLib.GetReputationLevels()
+	
+		for _,rep in pairs(entry.reputation) do
+		
+			-- Add a rep item with the name of the faction
+			local wnd = Apollo.LoadForm(self.xmlDoc, "RepEntry", recList, self)
+			wnd:FindChild("RepName"):SetText(rep.name)
+			
+			-- Get the rep value and level
+			local amount = rep.value .. "/" .. repLevels[rep.level].nMax
+			amount = amount .. " (" .. repLevels[rep.level].strName .. ")"
+			wnd:FindChild("RepLevel"):SetText(amount)
+			
 		end
 	
 	else -- schematics
@@ -1420,8 +1629,6 @@ function Generalist:AddTooltipInfo(wndParent, wndTooltip, item)
 		-- But if the item'd ID	exists as a key, we've found it.
 		if theInv[id] ~= nil then
 		
-			local invItem = Apollo.LoadForm(self.xmlDoc, "TooltipInventoryItem",
-				wndList, self)
 			local info = theInv[id]
 			local itemString = charName .. ": " .. info.count
 			
@@ -1439,8 +1646,9 @@ function Generalist:AddTooltipInfo(wndParent, wndTooltip, item)
 				itemString = itemString .. " (" .. places .. ")"
 			end
 			
-			invItem:SetText("<T TextColor=\"UI_TextHoloBody\">" .. itemString .. "</T>")
-			invItem:SetHeightToContentHeight()
+			self:AddToGenTooltip( wndList,
+				"<T TextColor=\"UI_TextHoloBody\">" .. itemString .. "</T>"
+			)
 			
 		end -- of whether that alt has the item
 		
@@ -1448,16 +1656,14 @@ function Generalist:AddTooltipInfo(wndParent, wndTooltip, item)
 	
 	-- Did more than one alt have some?
 	if totalAltsHave > 1 then
-		local invItem = Apollo.LoadForm(self.xmlDoc, "TooltipInventoryItem",
-			wndList, self)
 		local itemString = "(Total: " .. totalCount .. ")"
-		invItem:SetText("<T TextColor=\"UI_TextHoloBody\">" .. itemString .. "</T>")
-		invItem:SetHeightToContentHeight()
+		self:AddToGenTooltip( wndList,
+			"<T TextColor=\"UI_TextHoloBody\">" .. itemString .. "</T>"
+		)
 	end
 	
-	-- Now is this item an AMP which someone might know?
+	-- Is this item an AMP which someone might know?
 	--
-	--if string.find(item:GetItemTypeName()," AMP") ~= nil then
 	if item:GetItemFamilyName() == 'AMP' then
 		-- Loop through characters
 		for _,charName in ipairs(a) do
@@ -1466,47 +1672,46 @@ function Generalist:AddTooltipInfo(wndParent, wndTooltip, item)
 			for _,amp in ipairs(unlocked) do
 				if amp.nItemIdUnlock == id then
 					-- It's a match!
-					local invItem = Apollo.LoadForm(self.xmlDoc,
-						"TooltipInventoryItem", wndList, self)
-					invItem:SetText("<T TextColor=\"UI_WindowTextRed\">Already unlocked by " .. charName .. "</T>")
-					invItem:SetHeightToContentHeight()
+					self:AddToGenTooltip( wndList,
+						"<T TextColor=\"UI_WindowTextRed\">Already unlocked by " .. charName .. "</T>"
+					)
 				end -- whether they unlocked this one amp
+				
 			end -- loop through their amps	
-		end -- loop through alts
+			
+		end -- loop through alts looking for amps
+		
 	end -- if the tooltip is for an amp
 	
-	
-	-- Now is this item a schematic which someone might know?
+	-- Is this item a schematic which someone might know?
 	--
 	if item:GetItemFamilyName() == 'Schematic' then
 	
-		-- Get the name of the thing this schematic crafts
-		local theSpell = item:GetActivateSpell()
-		
-		if theSpell ~= nil then
-		
-			local theName = theSpell:GetName()
-			local theTier = theSpell:GetTradeskillRequirements().eTier
-		
-			-- Determine the skill associated with the schematic
-			-- This is ugly and I would love a cleaner way to do it,
-			-- but until I can get an API which tells me what the schematic's
-			-- internal ID is from the pattern-item, this is likely 
-			-- the best I can do.
-			local theSkillName = theSpell:GetTradeskillRequirements().strName
-		
-			local theSkill = CraftingLib.CodeEnumTradeskill[theSkillName]
-		
-			-- Super gross hack, because of a flaw in the table, where skill #16 is
-			-- named "Augmentor"
-			if theSkillName == "Technologist" then theSkill = 16 end
-		
-			-- Now chop off the beginning of the spell's name.
-			-- This is possibly the grossest bit.
-			--
-			local itemPos = string.find(theName, ": ")
-			local itemCreated = ''
+		-- We need three things to look this up.  Skill, tier, item created.
+		local theTier
+		local theName
+		local theSkill
+
+		-- If the item is a weird exception, then handle it
+		--
+		if self.recipeBogus[id] ~= nil then
 			
+			-- Truly grotesque hack because Carbine won't reliably tell me
+			-- what item is made by a given recipe.  A kind user on the
+			-- forums alerted me to this problem.
+			--
+			itemCreated = self.recipeBogus[id]
+			
+		else
+			
+			-- For the name, we start by using the recipe item's name
+			theName = item:GetName()
+			
+			-- Now chop off the beginning of the recipe item's name,
+			-- the bit that is "blueprint:" or "design:" or whatever.
+			--
+			local itemPos = string.find(theName, ":")
+				
 			-- If we found a colon, chop off everything up to and including it,
 			-- and then any whitespace between the colon and name of the item.
 			--
@@ -1514,80 +1719,130 @@ function Generalist:AddTooltipInfo(wndParent, wndTooltip, item)
 				itemCreated = string.sub(theName, itemPos + 1)
 				itemCreated = string.gsub(itemCreated, "^%s*", "")
 			end
-		
-			-- Now if we got a name for this thing ...
-			if itemCreated ~= '' then
 			
-				-- Print ("Found the item '" .. itemCreated .. "'")
-				
-				-- Loop through characters
-				for _,charName in ipairs(a) do
-		
-					-- A few cleanups for sanity and backwards compatibility
-
-					-- Their schematics
-					local schematics = self.altData[charName].schematics[theSkill]
-				
-					-- Do they know any schematics of this skill?
-					if schematics ~= nil then
-
-						-- Did we find the item in this skill?
-						local foundInSkill = 0
+		end -- of looking for the item in our "bogus" list
 			
-						-- Now loop through them
-						for _,recipe in ipairs(schematics) do
-							local name = recipe.strName
-							--if theSkill == 16 then
-							--	Print( "Checking '" .. name .. "' versus '" .. itemCreated .. "'" )
-							--end
-							if name == itemCreated then
-								-- It's a match!
-								foundInSkill = 1
-								local invItem = Apollo.LoadForm(self.xmlDoc,
-									"TooltipInventoryItem", wndList, self)
-								invItem:SetText("<T TextColor=\"UI_WindowTextRed\">Already known by " .. charName .. "</T>")
-								invItem:SetHeightToContentHeight()
-							end -- whether they know this recipe
-						end -- loop through recipes of this skill
-					
-						-- If we did not find it, AND the skill is active,
-						-- we should see if this alt
-						-- can learn the thing now or later.
-						--
-						if foundInSkill == 0 and 
-							self.altData[charName].skillActive[theSkill] == true then
-						
-							-- Special backwards compatibility, for pre 0.5.1,
-							-- to fill in tiers
-							if self.altData[charName].skillTier[theSkill] == nil then
-								self.altData[charName].skillTier[theSkill] = 1
-							end
+
+		-- For tier and skill, we need to look at the activated spell
+		--
+		local theSpell = item:GetActivateSpell()		
+		if theSpell ~= nil then
+		
+			theTier = theSpell:GetTradeskillRequirements().eTier
+		
+			-- Determine the skill associated with the schematic
+			-- This is ugly and I would love a cleaner way to do it,
+			-- but until I can get an API which tells me what the schematic's
+			-- internal ID is from the pattern-item, this is likely 
+			-- the best I can do.
+			--
+			local theSkillName = theSpell:GetTradeskillRequirements().strName
+		
+			-- Super gross hack, because of a flaw in the table, where skill #16 is
+			-- named "Augmentor"
+			--
+			if theSkillName == "Technologist" then
+				theSkill = 16
+			else
+				theSkill = CraftingLib.CodeEnumTradeskill[theSkillName]
+			end
+		
+		end -- of whether the activation spell is nil or not
+			
+		-- Now if we got a name, skill, and tier for this thing ...
+		--
+		if itemCreated ~= nil and theTier ~= nil and theSkill ~= nil then
+		
+			-- Validate the recipe name.  This is mainly for Generalist's
+			-- developer to find recipes whose names don't match the items they
+			-- create, which confuses the addon.  So we leave this block of code
+			-- turned off for most people.
+			--
+			-- Annoyingly, I find that I cannot even get a list of schematics for
+			-- a skill unless I'm logged into a character who has been taught the
+			-- skill, so even for my debugging purposes this is a pain.
+			--
+			local validateRecipes = 0	
+			if validateRecipes == 1 then
+			
+				-- does this recipe match?
+				local foundIt = 0
+			
+				-- Get ALL the schematics for the skill and tier
+				local tSchematicList = CraftingLib.GetSchematicList(theSkill, nil, theTier, true)
+				
+				-- Loop through and find it
+				for idx, tSchematic in pairs(tSchematicList) do
+					if tSchematic.strName == itemCreated then
+						foundIt = 1
+					end
+				end -- loop through possible schematics
+				
+				-- If we didn't find it, mention that
+				if foundIt == 0 then
+					self:AddToGenTooltip( wndList,
+						"<T TextColor=\"UI_WindowTextRed\">BOGUS RECIPE NAME?</T>"
+					)
+				end -- of mentioning the recipe is invalid
+				
+			end -- validation of recipes
+			
+			-- Loop through the alts and see who knows, or can learn, this schematic.
+			--
+			for _,charName in ipairs(a) do
 	
-							-- Is the alt's tier in this skill equal to or greater than
-							-- the item's tier?
-							if self.altData[charName].skillTier[theSkill] >= theTier then
-								local invItem = Apollo.LoadForm(self.xmlDoc,
-									"TooltipInventoryItem", wndList, self)
-								invItem:SetText("<T TextColor=\"green\">Can be learned by " .. charName .. "</T>")
-								invItem:SetHeightToContentHeight()
-							else
-								local invItem = Apollo.LoadForm(self.xmlDoc,
-									"TooltipInventoryItem", wndList, self)
-								invItem:SetText("<T TextColor=\"yellow\">Will be learnable by " .. charName .. "</T>")
-								invItem:SetHeightToContentHeight()
-							end
-						
-						end -- if they did not already know it
-					
-					end -- whether they know any schematics	of this skill
-			
-				end -- loop through alts
+				-- Their schematics
+				local schematics = self.altData[charName].schematics[theSkill]
 				
-			end -- did we find the name of the item created?
+				-- Do they know any schematics of this skill?
+				if schematics ~= nil then
+
+					-- Did we find the item in this skill?
+					local foundInSkill = 0
 			
-		end -- is there a spell we can parse?
+					-- Now loop through the schematics, looking for this thing
+					for _,recipe in ipairs(schematics) do
+						if recipe.strName == itemCreated then -- it's a match!
+							self:AddToGenTooltip(wndList,
+								"<T TextColor=\"UI_WindowTextRed\">Already known by " .. charName .. "</T>"
+							)
+							foundInSkill = 1
+						end 					
+					end -- loop through recipes of this skill
+					
+					-- If we did not find it, AND the skill is active,
+					-- we should see if this alt
+					-- can learn the thing now or later.
+					--
+					if foundInSkill == 0 and self.altData[charName].skillActive[theSkill] == true then
+						
+						-- Special backwards compatibility, for pre 0.5.1,
+						-- to fill in tiers
+						if self.altData[charName].skillTier[theSkill] == nil then
+							self.altData[charName].skillTier[theSkill] = 1
+						end
+	
+						-- Is the alt's tier in this skill equal to or greater than
+						-- the item's tier?
+						if self.altData[charName].skillTier[theSkill] >= theTier then
+							self:AddToGenTooltip(wndList,
+								"<T TextColor=\"green\">Can be learned by " .. charName .. "</T>"
+							)
+						else
+							self:AddToGenTooltip(wndList,
+								"<T TextColor=\"yellow\">Will be learnable by " .. charName .. "</T>"
+							)
+						end
+						
+					end -- if they did not already know it
+					
+				end -- whether they know any schematics	of this skill
+			
+			end -- loop through alts looking for this schematic
+							
+		end -- did we find the name/tier/skill of the item created by the recipe
 		
-	end -- if the tooltip is for a recipe
+	end -- if the tooltip is for a recipe item
 		
 	-- Put our summary pane together and set its height
 	local wndHeight = wndList:ArrangeChildrenVert()
@@ -1598,6 +1853,14 @@ function Generalist:AddTooltipInfo(wndParent, wndTooltip, item)
 	
 	-- And resize to fit
 	wndTooltip:Move(0, 0, wndTooltip:GetWidth(), wndTooltip:GetHeight()+wndHeight)
+end
+
+-- Add a child to that tooltip item containing text.
+--
+function Generalist:AddToGenTooltip( wndList, strText )
+	local invItem = Apollo.LoadForm(self.xmlDoc,"TooltipInventoryItem", wndList, self)
+	invItem:SetText(strText)
+	invItem:SetHeightToContentHeight()
 end
 
 ---------------------------------------------------------------------------------------------------

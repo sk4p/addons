@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Addon Author="Bitwise, Sinaloit, and Garet Jax" APIVersion="8" Name="Rover" Description="A utility Addon that provides a Watch window for lua variables. Awesome!" Version="1.28f">
+<Addon Author="Bitwise, Sinaloit, and Garet Jax" APIVersion="8" Name="Rover" Description="A utility Addon that provides a Watch window for lua variables.  Awesome!" Version="1.36">
     <Script Name="Rover.lua"/>
     <Form Name="Rover.xml"/>
+    <DocData Name="LuaDocData\000000.xml"/>
+    <DocData Name="LuaDocData\000002.xml"/>
+    <DocData Name="LuaDocData\000003.xml"/>
+    <DocData Name="LuaDocData\000004.xml"/>
 </Addon>

@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Addon Author="Hayato" APIVersion="8" Name="ItemPreviewImproved" Description="Enables item preview of every armor type in one window">
+<Addon Author="Hayato" APIVersion="8" Name="ItemPreviewImproved" Description="Enables item preview of every armor type in one window" Version="2.0.2">
+	<Script Name="lib\GeminiAddon\GeminiAddon.lua"/>
+	<Script Name="lib\GeminiHook\GeminiHook-1.0.lua"/>
+	<Script Name="lib\LibApolloFixes\LibApolloFixes-1.0.lua"/>
+	<Script Name="tables\FABKits.lua"/>
+	<Script Name="tables\Mounts.lua"/>
     <Script Name="ItemPreviewImproved.lua"/>
     <Form Name="ItemPreviewImproved.xml"/>
+	<ReplaceAddon Name="ItemPreview"/>
 </Addon>
