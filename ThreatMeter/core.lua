@@ -31,7 +31,7 @@ local strformat = string.format
 -- Obtained from GameLib.GetCurrentClassInnateAbilitySpell():GetId()
 local ktTankStances = {
 	[47881] = true, -- Engineer provocation mode
-	[32596] = true, -- Warrior bulwalk stance
+	[47022] = true, -- Warrior bulwalk stance
 	[46074] = true, -- Stalker suit mode: evasive
 }
 
@@ -117,7 +117,7 @@ function ThreatMeter:OnSaveSettings(eLevel)
   local tData = DaiUtil.TableCopy(self.db)
   tData.Version = CONFIG_VERSION
   tData.tAnchorOffsets = {self.wndMain:GetAnchorOffsets()}
-  
+  tData.TWarningOffsets = {self.wndWarning:GetAnchorOffsets()} 
   DaiUtil.SerializeColors(tData)
   
   return tData
@@ -145,13 +145,18 @@ function ThreatMeter:OnRestoreSettings(eLevel, tData)
     tData.tAnchorOffsets = nil
   end
 
+    if type(tData.TWarningOffsets) == "table" and #tData.TWarningOffsets == 4 then
+    self.wndWarning:SetAnchorOffsets(unpack(tData.TWarningOffsets))
+    tData.TWarningOffsets = nil
+  end
+
   -- merge the settings with the defaults
   DaiUtil.TableMerge(self.db, tData)
 end
 
 
 -----------------------------------------------------------------------------------------------
--- ThreatMeter Slash Commands
+-- ThreatMeter Slash war
 -----------------------------------------------------------------------------------------------
 --- General slash command handler
 -- @param cmd
@@ -171,19 +176,18 @@ end
 
 function ThreatMeter:OnClose( wndHandler, wndControl, eMouseButton )
 	self.wndMain:Show(false)
+	self:Warn(false)
 end
 
 function ThreatMeter:UpdateVisibility()
   local bShow = self:ShouldShow()
-  if not bShow then
-    self:Warn(false)
-  end
-  
   self.wndMain:Show(bShow)
+  self:Warn(bShow)
+
 end
 
 function ThreatMeter:ShouldShow()
-  if self.db.bHideWhenNotInCombat and not self.bInCombat then 
+  if self.db.bHideWhenNotInCombat and not self.bInCombat then
     return false 
   end
 
@@ -200,7 +204,6 @@ function ThreatMeter:ShouldShow()
 	if self.db.bHideWhenInPvP and MatchingGame.IsInPVPGame() then 
     bShow = false 
   end
-  
 	return bShow
 end
 
@@ -214,16 +217,16 @@ function ThreatMeter:Warn(bShow)
       Sound.Play(self.db.nWarningSoundId)
     end
     if self.db.bWarningUseMessage then
-      self.wndWarning:Show(bShow)
+      self.wndWarning:Show(true)
     end  
   else
-    self.wndWarning:Show(bShow)
+    self.wndWarning:Show(false)
   end
 end
 
 -- Determines if there is a need to show the high threat warning.
 -- Show warning when the player breach the warning threshold and
--- the player is not the only one of the threat table.
+-- the player is not the only one of the threat table.sdaa
 -- Also check if player is in a tank stance and if the disable tank
 -- warning is on.
 function ThreatMeter:UpdateWarningStatus(nMyThreat, nTopThreat)
@@ -290,8 +293,8 @@ function ThreatMeter:OnTargetThreatListUpdated(...)
 		self:ValidateTargetThreatStore()
 
 		local nTopThreat = select(2, ...)
-		self:UpdateVisibility()
 		self:UpdateGroupData()
+		self:UpdateVisibility()
 		
 		-- update threat data store
 		local tThreat = {}
@@ -308,9 +311,6 @@ function ThreatMeter:OnTargetThreatListUpdated(...)
 		
 		self:UpdateTPS()
 		self:UpdateDisplay(tThreat)
-	else
-		self.wndMain:Show(false)
-    self:Warn(false)
 	end
 end
 
@@ -377,6 +377,7 @@ end
 function ThreatMeter:OnUnitEnteredCombat(unit, bInCombat)
 	if unit and unit:IsThePlayer() then
     self.bInCombat = bInCombat
+    self:UpdateVisibility()
 	end
 end
 

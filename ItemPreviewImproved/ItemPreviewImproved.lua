@@ -82,7 +82,8 @@ local suppVendors =
 local suppRolls =
 {
 	"NeedVsGreed",
-	"LootRollEnhanced"
+	"LootRollEnhanced",
+	"NeedVsGreedLite"
 }
 
 -- Supported Dialog Addons
@@ -540,6 +541,18 @@ end
 -- ItemPreviewImproved Functions
 -----------------------------------------------------------------------------------------------
 -- Define general functions here
+function ItemPreviewImproved:DelayTimer()
+       Apollo.StartTimer("EventThresholdTimer")
+end
+
+function ItemPreviewImproved:ItemPreviewFormOpenCallback()
+        local wndImpSalv = Apollo.FindWindowByName("ItemPreviewForm")
+        if wndImpSalv and wndImpSalv:IsShown() then
+               wndImpSalv:Show(false)
+			   wndImpSalv:Destroy()
+        end
+end
+
 function ItemPreviewImproved:DrawLoot(luaCaller, tCurrentElement, nItemsInQueue)
 	RollAddon.wndMain:FindChild("GiantItemIcon"):AddEventHandler("MouseButtonUp", "OnMouseButtonUp")
 	RollAddon.wndMain:FindChild("GiantItemIcon"):SetData(tCurrentElement.itemDrop)
@@ -792,6 +805,8 @@ function ItemPreviewImproved:OnShowItemInDressingRoom(item)
 				previewAddon.wndMain:Show(false)
 				previewAddon.wndMain:Destroy()
 			end
+		else
+			self:DelayTimer()
 		end
 	
 	if item == nil or not self:HelperValidateSlot(item) then

@@ -20,6 +20,7 @@ local SimpleQuestTracker = {}
 -- Variables
 -----------------------------------------------------------------------------------------------
 local SimpleMode = true
+local SimpleQuestTracker_loc = SimpleQuestTracker_loc_enUS
 local CarbineQuestTracker = {}
 local CarbineRedrawAll = nil
 local CarbineDrawEpisodeQuests = nil
@@ -44,10 +45,23 @@ function SimpleQuestTracker:Init()
 		"QuestTracker"
 	}
     Apollo.RegisterAddon(self, bHasConfigureFunction, strConfigureButtonText, tDependencies)
-end
- 
 
------------------------------------------------------------------------------------------------
+	local strCancel = Apollo.GetString(1)
+	-- German
+	if strCancel == "Abbrechen" then 
+		SimpleQuestTracker_loc = SimpleQuestTracker_loc_deDE
+	end
+
+	-- French
+	if strCancel == "Annuler" then
+		SimpleQuestTracker_loc = SimpleQuestTracker_loc_frFR
+	end
+
+	-- Other fall back on English
+	-- Already set as default
+end
+
+--------------------------------------------------------------------------------------------
 -- SimpleQuestTracker OnLoad
 -----------------------------------------------------------------------------------------------
 function SimpleQuestTracker:OnLoad()
@@ -71,7 +85,7 @@ function SimpleQuestTracker:OnDocLoaded()
 	    self.wndMain:Show(false, true)
 
 		-- if the xmlDoc is no longer needed, you should set it to nil
-		-- self.xmlDoc = nil
+		self.xmlDoc = nil
 		
 		-- Register handlers for events, slash commands and timer, etc.
 		-- e.g. Apollo.RegisterEventHandler("KeyDown", "OnKeyDown", self)
@@ -125,14 +139,15 @@ function SimpleQuestTracker:RedrawAll()
 						if wndQuest:GetName() == "QuestItem" then
 							local queQuest = wndQuest:GetData()
 							local epiEpisode = queQuest:GetEpisode()
-							if not GameLib.IsInWorldZone(queQuest:GetEpisode():GetZoneId()) then
+							if (epiEpisode.IsRegionalStory or epiEpisode.IsZoneStory) and not GameLib.IsInWorldZone(queQuest:GetEpisode():GetZoneId()) then
 								self:QueueQuestForDestroy(queQuest)
 							end
 						end
 					end
 				elseif wndEp:GetName() == "QuestItem" then
 					local queQuest = wndEp:GetData()
-					if not GameLib.IsInWorldZone(queQuest:GetEpisode():GetZoneId()) then
+					local epiEpisode = queQuest:GetEpisode()
+					if (epiEpisode.IsRegionalStory or epiEpisode.IsZoneStory) and not GameLib.IsInWorldZone(queQuest:GetEpisode():GetZoneId()) then
 						self:QueueQuestForDestroy(queQuest)
 					end
 				end
@@ -162,7 +177,7 @@ function SimpleQuestTracker:RedrawAll()
 		-- Begin modified region
 		-- Always use the same Episode wnd so just go ahead and create it once here instead of attempting to make a new one for every episode
 		wndEpisodeGroup = self:FactoryProduce(self.wndMain:FindChild("QuestTrackerScroll"), "EpisodeGroupItem", "4EGTask")
-		wndEpisodeGroup:FindChild("EpisodeGroupTitle"):SetText(SimpleQuestTracker_ActiveQuests)
+		wndEpisodeGroup:FindChild("EpisodeGroupTitle"):SetText(SimpleQuestTracker_loc.ActiveQuests)
 		
 		for idx, epiEpisode in pairs(QuestLib.GetTrackedEpisodes(self.bQuestTrackerByDistance)) do
 			local drawEpisode = false;  -- use a boolean in place of checking if an object was created since we are no longer creating objects here
@@ -222,14 +237,14 @@ function SimpleQuestTracker:DrawEpisodeQuests(epiEpisode, wndContainer)
 			-- Calculate distance and store in the quest's tracker wnd object
 			-- for each map marker of this quest, claculate the approximate distance from the player  Note this is not the actual distance, just enough math to sort them mostly right quickly.
 			-- if no markers, than the distance is -1, and the quest will display on top of the tracker in the order received from the QuestLib
-			local distance = -1;
+			local distance = 9999999999;
 			for idx, mapRegion in ipairs(queQuest:GetMapRegions()) do
 				local deltaX = mapRegion.tIndicator.x - playerPosition.x;
 				local deltaY = mapRegion.tIndicator.y - playerPosition.y;
 				local deltaZ = mapRegion.tIndicator.z - playerPosition.z;
 				local curDistance = (deltaX * deltaX) + (deltaY * deltaY) + (deltaZ * deltaZ);
 				-- only care about the minimum distance value
-				if distance == -1 or curDistance < distance then
+				if distance == 9999999999 or curDistance < distance then
 					distance = curDistance;
 				end
 			end

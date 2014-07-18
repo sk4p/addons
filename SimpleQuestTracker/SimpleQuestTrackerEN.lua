@@ -1,2 +1,5 @@
 -- English Localization
-SimpleQuestTracker_ActiveQuests = "Proximity List"
+-- Mod author's native language
+SimpleQuestTracker_loc_enUS = {
+	["ActiveQuests"] = "Proximity List"
+}

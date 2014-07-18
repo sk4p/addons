@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Addon Author="daihenka" APIVersion="8" Name="ThreatMeter" Description="A Threat Meter" Version="0.8.1">
+<Addon Author="daihenka, Ark" APIVersion="9" Name="ThreatMeter" Description="A Threat Meter" Version="0.8.2">
     <Script Name="libs/DaiAddon-1.0/DaiAddon.lua"/>
     <Script Name="libs/DaiGUI-1.0/DaiGUI.lua"/>
     <Script Name="libs/DaiUtil-1.0/DaiUtil.lua"/>

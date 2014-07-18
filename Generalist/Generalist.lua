@@ -143,12 +143,17 @@ function Generalist:OnLoad()
 	
 	-- load our version info
 	self.version = XmlDoc.CreateFromFile("toc.xml"):ToTable().Version
-	
-	-- set up mappings for bogus recipe items
-	--self:PopulateBogusRecipeList()
 		
 	-- init hook for tooltips
 	local TT = Apollo.GetAddon("ToolTips")
+	
+	-- if this loaded too early ...
+	if TT == nil then
+		Print("Sorry, but Generalist managed to load before the ToolTips addon loaded.")
+		Print("You will not have Generalist information about inventory and alts which can learn schematics embedded in your tooltips.")
+		Print("Please do /reloadui if you would like to fix this.")
+		return
+	end
 	
 	-- Preserve the original callbacks call
 	local origCreateCallNames = TT.CreateCallNames
@@ -226,6 +231,12 @@ function Generalist:OnDocLoaded()
 		
 		-- Update my level if I ding
 		Apollo.RegisterEventHandler("PlayerLevelChange", "GetCharLevel", self)
+		
+		-- Update my decor if I crate something
+		Apollo.RegisterEventHandler("ItemSentToCrate", "GetCharDecor", self)
+		
+		-- Update my dyes if I learn one
+		Apollo.RegisterEventHandler("DyeLearned", "GetCharDyes", self)
 
 		-- Register a timer until we can load player info
 		self.timer = ApolloTimer.Create(2, true, "OnTimer", self)
@@ -492,6 +503,8 @@ function Generalist:UpdateCurrentCharacter()
 	-- Rep
 	self:GetCharReputations()
 	
+	-- Decor
+	self:GetCharDecor()
 	
 end
 
@@ -802,6 +815,65 @@ function Generalist:GetCharReputations()
 end -- of gathering rep
 
 ----------------------------
+-- Character's decor
+----------------------------
+
+function Generalist:GetCharDecor()
+
+	-- If possible, get my name.
+	local unitPlayer = GameLib.GetPlayerUnit()
+	if unitPlayer == nil then return end
+	local myName = unitPlayer:GetName()
+	if self.altData[myName] == nil then self.altData[myName] = {} end
+	
+	-- Return if we're not on our own property.
+	if not HousingLib.IsOnMyResidence() then
+		return
+	end
+	
+	-- Temp decor table.
+	local theDecor = {}
+	
+	-- Get placed decor.
+	local tDecor = HousingLib.GetPlacedDecorList()
+	
+	-- Loop through it.
+	for _,tItem in ipairs(tDecor) do
+	
+		local name = tItem.strName
+	
+		if theDecor[name] == nil then
+			theDecor[name] = {}
+			theDecor[name] = 1
+		else
+			theDecor[name] = theDecor[name] + 1
+		end
+		
+	end
+	
+	-- Get crated decor.
+	tDecor = HousingLib.GetDecorCrateList()
+	
+		-- Loop through it.
+	for _,tItem in ipairs(tDecor) do
+	
+		local name = tItem.strName
+	
+		if theDecor[name] == nil then
+			theDecor[name] = {}
+			theDecor[name] = tItem.nCount
+		else
+			theDecor[name] = theDecor[name] + tItem.nCount
+		end
+		
+	end
+	
+	-- And save it.
+	self.altData[myName].decor = theDecor
+	
+end
+
+----------------------------
 -- Character's tradeskills
 ----------------------------
 
@@ -1091,14 +1163,14 @@ function Generalist:PopulateDetailWindow(charName)
 		self.wndAmps:FindChild("TradeskillPickerList"), self)
 	wndCurrency:SetData('currency')
 	wndCurrency:SetText('Currencies')
-	
+		
 	-- Next, sneak dyes in
 	local wndDyes = Apollo.LoadForm(self.xmlDoc, "TradeskillBtn", 
 		self.wndAmps:FindChild("TradeskillPickerList"), self)
 	wndDyes:SetData('dyes')
 	wndDyes:SetText('Dyes')	
 	
-	-- Next, sneak dyes in
+	-- Next, sneak reputation in
 	local wndRep = Apollo.LoadForm(self.xmlDoc, "TradeskillBtn", 
 		self.wndAmps:FindChild("TradeskillPickerList"), self)
 	wndDyes:SetData('reputation')
@@ -1279,6 +1351,11 @@ function Generalist:EnsureBackwardsCompatibility(myName)
 	-- Reputation
 	if self.altData[myName].reputation == nil then
 		self.altData[myName].reputation = {}
+	end
+	
+	-- Decor
+	if self.altData[myName].decor == nil then
+		self.altData[myName].decor = {}
 	end
 	
 end
@@ -1488,7 +1565,6 @@ end
 
 function Generalist:GeneralistSearchSubmitted( wndHandler, wndControl, eMouseButton )
 
-	-- Okay, this is gross.
 	-- First, clear previous search results.
 	--
 	local resList = self.wndSearch:FindChild("ResultList")
@@ -1536,6 +1612,7 @@ function Generalist:GeneralistSearchSubmitted( wndHandler, wndControl, eMouseBut
 					wnd:FindChild("ItemPlace"):SetText("(Unknown)")
 				else
 					local locs = {}
+					if bit32.band(8, info.location) == 8 then table.insert(locs,"Decor") end
 					if bit32.band(4, info.location) == 4 then table.insert(locs,"Equipped") end
 					if bit32.band(1, info.location) == 1 then table.insert(locs,"Inventory") end
 					if bit32.band(2, info.location) == 2 then table.insert(locs,"Tradeskill") end
@@ -1639,6 +1716,7 @@ function Generalist:AddTooltipInfo(wndParent, wndTooltip, item)
 			-- And the location
 			if info.location ~= nil then
 				local locs = {}
+				if bit32.band(8, info.location) == 4 then table.insert(locs,"Decor") end
 				if bit32.band(4, info.location) == 4 then table.insert(locs,"Equipped") end
 				if bit32.band(1, info.location) == 1 then table.insert(locs,"Inventory") end
 				if bit32.band(2, info.location) == 2 then table.insert(locs,"Tradeskill") end
@@ -1843,6 +1921,27 @@ function Generalist:AddTooltipInfo(wndParent, wndTooltip, item)
 		end -- did we find the name/tier/skill of the item created by the recipe
 		
 	end -- if the tooltip is for a recipe item
+	
+	if item:GetItemTypeName() == 'Decor' then
+	
+		-- Loop through alts
+		for _,charName in ipairs(a) do
+
+			-- Check their decor for this thing
+			local iName = item:GetName()
+			local decor = self.altData[charName].decor
+			
+			if decor[iName] ~= nil then	
+				-- It's a match!	
+				local itemString = charName .. " has " .. decor[iName] .. " for decor"				
+				self:AddToGenTooltip( wndList,
+					"<T TextColor=\"UI_TextHoloBody\">" .. itemString .. "</T>"
+				)
+			end -- is this item in decor
+			
+		end -- loop through alts looking for decor
+	
+	end -- if the tooltip is for a decor item
 		
 	-- Put our summary pane together and set its height
 	local wndHeight = wndList:ArrangeChildrenVert()

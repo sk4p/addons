@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Addon Author="PIR0" APIVersion="8" Name="SimpleQuestTracker" Description="Simple quest tracker without episode categories to get in the way of a simple proximity ordered list.">
-	<Script Name="SimpleQuestTrackerEN.lua"/>
+<Addon Author="PIR0" APIVersion="9" Name="SimpleQuestTracker" Description="Simple quest tracker without episode categories to get in the way of a simple proximity ordered list." Version="7">
+    <Script Name="SimpleQuestTrackerEN.lua"/>
+    <Script Name="SimpleQuestTrackerFR.lua"/>
+    <Script Name="SimpleQuestTrackerDE.lua"/>
     <Script Name="SimpleQuestTracker.lua"/>
-	<Form Name="SimpleQuestTracker.xml"/>
+    <Form Name="SimpleQuestTracker.xml"/>
 </Addon>
