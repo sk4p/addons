@@ -1173,8 +1173,8 @@ function Generalist:PopulateDetailWindow(charName)
 	-- Next, sneak reputation in
 	local wndRep = Apollo.LoadForm(self.xmlDoc, "TradeskillBtn", 
 		self.wndAmps:FindChild("TradeskillPickerList"), self)
-	wndDyes:SetData('reputation')
-	wndDyes:SetText('Reputation')	
+	wndRep:SetData('reputation')
+	wndRep:SetText('Reputation')	
 	
 	-- Finally, do the tradeskills
 	if entry.tradeSkills ~= nil and table.getn(entry.tradeSkills) > 0 then
@@ -1931,7 +1931,7 @@ function Generalist:AddTooltipInfo(wndParent, wndTooltip, item)
 			local iName = item:GetName()
 			local decor = self.altData[charName].decor
 			
-			if decor[iName] ~= nil then	
+			if decor ~= nil and decor[iName] ~= nil then	
 				-- It's a match!	
 				local itemString = charName .. " has " .. decor[iName] .. " for decor"				
 				self:AddToGenTooltip( wndList,
